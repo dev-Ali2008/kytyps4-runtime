@@ -65,11 +65,11 @@ jobs:
           fi
 
       - name: Fetch box64 at the pinned revision
-        run: | 
-          rm -rf runtime/sources/box64 
-          bash runtime/scripts/checkout-component.sh box64 https://github.com/ptitSeb/box64.git 50c8b90b09b433ab0767de44af2d0731cb0748b7
+        # box64 is NOT pushed with the repo (a nested .git would make git treat
         # it as a submodule). Clone it at the exact locked revision instead.
-        run: bash runtime/scripts/checkout-component.sh box64 https://github.com/ptitSeb/box64.git 50c8b90b09b433ab0767de44af2d0731cb0748b7
+        run: |
+          rm -rf runtime/sources/box64
+          bash runtime/scripts/checkout-component.sh box64 https://github.com/ptitSeb/box64.git 50c8b90b09b433ab0767de44af2d0731cb0748b7
 
       - name: Install Debian build dependencies
         run: bash runtime/scripts/install-debian-runtime-deps.sh
