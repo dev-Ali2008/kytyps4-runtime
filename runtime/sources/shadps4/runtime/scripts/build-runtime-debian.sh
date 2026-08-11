@@ -12,5 +12,8 @@ fi
 bash runtime/scripts/build-shadps4-x86_64.sh
 bash runtime/scripts/build-box64-host.sh
 bash runtime/scripts/build-shadps4-arm64.sh
+bash runtime/scripts/vendor-winlator.sh
+bash runtime/scripts/vendor-vortek.sh
+bash runtime/scripts/build-vortek-client.sh
 node runtime/scripts/stage-debian-runtime.mjs
 node runtime/scripts/package-runtime.mjs

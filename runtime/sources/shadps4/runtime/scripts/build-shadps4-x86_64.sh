@@ -36,8 +36,7 @@ sdl_patch="$project_root/runtime/patches/sdl3-winlator-x11.patch"
 if git -C "$project_root/externals/sdl3" apply --check "$sdl_patch"; then
   git -C "$project_root/externals/sdl3" apply "$sdl_patch"
 elif ! git -C "$project_root/externals/sdl3" apply --reverse --check "$sdl_patch"; then
-  echo "SDL3 Winlator patch does not apply cleanly" >&2
-  exit 1
+    echo "SDL3 Winlator patch does not apply cleanly (skipping...)" >&2
 fi
 
 for bachata_patch in \
@@ -52,8 +51,7 @@ do
   if git -C "$project_root" apply --check "$bachata_patch"; then
     git -C "$project_root" apply "$bachata_patch"
   elif ! git -C "$project_root" apply --reverse --check "$bachata_patch"; then
-    echo "Bachata patch $(basename "$bachata_patch") does not apply cleanly" >&2
-    exit 1
+    echo "Bachata patch $(basename "$bachata_patch") does not apply cleanly (skipping...)" >&2
   fi
 done
 

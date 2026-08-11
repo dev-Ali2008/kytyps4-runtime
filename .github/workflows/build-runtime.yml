@@ -39,32 +39,69 @@ jobs:
       - name: Install git and dependencies
         run: |
           apt-get update
-          apt-get install -y git curl nodejs
+          apt-get install -y git curl nodejs python3
 
       - name: Ensure shadps4 project files and submodules are ready
         shell: bash
         run: |
           set -euo pipefail
+          
+          # 1. Setup project files at root (EXCLUDING the runtime folder)
           if [ ! -f CMakeLists.txt ] && [ -f runtime/sources/shadps4/CMakeLists.txt ]; then
-            echo "copying shadps4 project files from runtime/sources/shadps4"
+            echo "Copying shadps4 project files (excluding runtime/ to preserve fixes)..."
+            # Move the source's runtime folder away so it doesn't overwrite our fixed one
+            mv runtime/sources/shadps4/runtime /tmp/shadps4_runtime_orig
+            
+            # Copy everything else to root
             shopt -s dotglob
-            cp -a runtime/sources/shadps4/. .
+            cp -a runtime/sources/shadps4/* .
+            
+            # Put the original runtime back where it was (optional, but cleaner)
+            mv /tmp/shadps4_runtime_orig runtime/sources/shadps4/runtime
           fi
           
-          # Initialize a git repo at the root so we can use git submodule commands
+          # 2. Initialize a git repo at the root for 'git apply' to work
           git init -q
           git config user.name ci
           git config user.email ci@example.com
           git add -A
           git commit -qm "bootstrap repo layout"
           
+          # 3. Manually and recursively clone all submodules
           if [ -f .gitmodules ]; then
-            echo "Initializing and updating submodules recursively..."
-            # Using the official command but with --depth 1 for speed
-            # and --force to overwrite any existing empty directories
-            git submodule update --init --recursive --depth 1
-          else
-            echo "No .gitmodules found, skipping submodule init."
+            echo "Manually cloning all submodules recursively..."
+            
+            clone_submodules() {
+              local mod_file=$1
+              local base_path=$2
+              
+              git config -f "$mod_file" --get-regexp '^submodule\..*\.path$' | while read -r key sub_path; do
+                name=$(echo "$key" | sed 's/submodule\.\(.*\)\.path/\1/')
+                url=$(git config -f "$mod_file" --get "submodule.${name}.url")
+                
+                full_path="${base_path}${sub_path}"
+                echo "Processing submodule $name at $full_path (URL: $url)"
+                
+                rm -rf "$full_path"
+                mkdir -p "$(dirname "$full_path")"
+                
+                # Clone the submodule
+                for i in {1..3}; do
+                  git clone --depth 1 "$url" "$full_path" && break || {
+                    echo "Clone failed, retrying... ($i/3)"
+                    sleep 5
+                  }
+                done
+                
+                # Recursively handle nested submodules
+                if [ -f "$full_path/.gitmodules" ]; then
+                  echo "Entering nested submodules for $full_path..."
+                  clone_submodules "$full_path/.gitmodules" "$full_path/"
+                fi
+              done
+            }
+            
+            clone_submodules ".gitmodules" ""
           fi
 
       - name: Fetch box64 at the pinned revision
