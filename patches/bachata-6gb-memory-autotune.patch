@@ -1,0 +1,138 @@
+diff --git a/src/core/address_space.cpp b/src/core/address_space.cpp
+index ad64271..c20e6ee 100644
+--- a/src/core/address_space.cpp
++++ b/src/core/address_space.cpp
+@@ -196,8 +196,8 @@ struct AddressSpace::Impl {
+         user_base = reinterpret_cast<u8*>(USER_MIN);
+         user_size = supported_user_max - USER_MIN - 1;
+ 
+-        // Increase BackingSize to account for config options.
+-        BackingSize += EmulatorSettings.GetExtraDmemInMBytes() * 1_MB;
++        // Size the backing file to the configured total physical memory.
++        BackingSize = GetTotalGuestMemoryBytes();
+ 
+         // Allocate backing file that represents the total physical memory.
+         backing_handle = CreateFileMapping2(INVALID_HANDLE_VALUE, nullptr, FILE_MAP_ALL_ACCESS,
+@@ -636,7 +636,7 @@ enum PosixPageProtection {
+ 
+ struct AddressSpace::Impl {
+     Impl() {
+-        BackingSize += EmulatorSettings.GetExtraDmemInMBytes() * 1_MB;
++        BackingSize = GetTotalGuestMemoryBytes();
+         // Allocate virtual address placeholder for our address space.
+         system_managed_size = SystemManagedSize;
+         system_reserved_size = SystemReservedSize;
+diff --git a/src/core/memory.cpp b/src/core/memory.cpp
+index b51ae57..5bcb50f 100644
+--- a/src/core/memory.cpp
++++ b/src/core/memory.cpp
+@@ -7,6 +7,7 @@
+ #ifndef _WIN32
+ #include <unistd.h>
+ #endif
++#include <algorithm>
+ #include "common/elf_info.h"
+ #include "core/emulator_settings.h"
+ #include "core/file_sys/fs.h"
+@@ -18,6 +19,30 @@
+ 
+ namespace Core {
+ 
++u64 GetTotalGuestMemoryBytes() {
++    // Small headroom: the backing file is lazily committed, only the pages the
++    // game actually touches cost RAM, so we can size it close to physical RAM.
++    constexpr u64 mobile_headroom = 512_MB;
++    // Never drop below what typical titles need for their direct+flexible maps,
++    // otherwise the direct memory allocator fails before the game boots.
++    constexpr u64 min_budget = 4_GB;
++    // The maximum budget matches the devkit default on desktop hosts.
++    constexpr u64 max_budget = ORBIS_KERNEL_TOTAL_MEM_DEV_PRO + ORBIS_KERNEL_FLEXIBLE_MEMORY_SIZE;
++
++    u64 budget = max_budget;
++#ifndef _WIN32
++    const long pages = sysconf(_SC_PHYS_PAGES);
++    const long page_size = sysconf(_SC_PAGE_SIZE);
++    if (pages > 0 && page_size > 0) {
++        const u64 host_ram = static_cast<u64>(pages) * static_cast<u64>(page_size);
++        const u64 usable = host_ram > mobile_headroom ? host_ram - mobile_headroom : host_ram / 2;
++        budget = std::clamp(usable, min_budget, max_budget);
++    }
++#endif
++    budget += EmulatorSettings.GetExtraDmemInMBytes() * 1_MB;
++    return budget;
++}
++
+ MemoryManager::MemoryManager() {
+     LOG_INFO(Kernel_Vmm, "Virtual memory space initialized with regions:");
+ 
+@@ -31,19 +56,15 @@ MemoryManager::MemoryManager() {
+     }
+ 
+     // Pre-initialize direct backing
+-    auto total_size = ORBIS_KERNEL_TOTAL_MEM_DEV_PRO;
+-    s32 extra_dmem = EmulatorSettings.GetExtraDmemInMBytes();
+-    if (extra_dmem != 0) {
+-        total_size += extra_dmem * 1_MB;
+-    }
+-    total_direct_size = total_size;
++    const u64 total_size = GetTotalGuestMemoryBytes();
++    total_direct_size = total_size - ORBIS_KERNEL_FLEXIBLE_MEMORY_SIZE;
+     dmem_map.clear();
+     dmem_map.emplace(0, PhysicalMemoryArea{0, total_direct_size});
+ 
+     // Pre-initialize flexible backing
+     total_flexible_size = ORBIS_KERNEL_FLEXIBLE_MEMORY_SIZE;
+     fmem_map.clear();
+-    fmem_map.emplace(total_size, PhysicalMemoryArea{total_size, total_flexible_size});
++    fmem_map.emplace(total_direct_size, PhysicalMemoryArea{total_direct_size, total_flexible_size});
+ 
+     ASSERT_MSG(Libraries::Kernel::sceKernelGetCompiledSdkVersion(&sdk_version) == 0,
+                "Failed to get compiled SDK version");
+@@ -53,25 +74,13 @@ MemoryManager::~MemoryManager() = default;
+ 
+ void MemoryManager::SetupMemoryRegions(u64 flexible_size, bool use_extended_mem1,
+                                        bool use_extended_mem2) {
+-    // Calculate actual direct and flexible memory sizes
+-    const bool is_neo = ::Libraries::Kernel::sceKernelIsNeoMode();
+-    auto total_size = is_neo ? ORBIS_KERNEL_TOTAL_MEM_PRO : ORBIS_KERNEL_TOTAL_MEM;
+-    if (EmulatorSettings.IsDevKit()) {
+-        total_size = is_neo ? ORBIS_KERNEL_TOTAL_MEM_DEV_PRO : ORBIS_KERNEL_TOTAL_MEM_DEV;
+-    }
+-    s32 extra_dmem = EmulatorSettings.GetExtraDmemInMBytes();
+-    if (extra_dmem != 0) {
+-        LOG_WARNING(Kernel_Vmm,
+-                    "extraDmemInMbytes is {} MB! Old Direct Size: {:#x} -> New Direct Size: {:#x}",
+-                    extra_dmem, total_size, total_size + extra_dmem * 1_MB);
+-        total_size += extra_dmem * 1_MB;
+-    }
+-    if (!use_extended_mem1 && is_neo) {
+-        total_size -= 256_MB;
+-    }
+-    if (!use_extended_mem2 && !is_neo) {
+-        total_size -= 128_MB;
+-    }
++    // Size the direct+flexible budget to the device. This must match the backing
++    // file sized by GetTotalGuestMemoryBytes() (which already adds extraDmem),
++    // otherwise the game maps direct memory beyond the end of the backing file
++    // and the GPU driver faults (SIGSEGV) on those pages.
++    const u64 total_size = GetTotalGuestMemoryBytes();
++    (void)use_extended_mem1;
++    (void)use_extended_mem2;
+ 
+     // Update stored totals
+     total_flexible_size = flexible_size - ORBIS_KERNEL_FLEXIBLE_MEMORY_BASE;
+diff --git a/src/core/memory.h b/src/core/memory.h
+index 0335c8c..77f2c11 100644
+--- a/src/core/memory.h
++++ b/src/core/memory.h
+@@ -29,6 +29,10 @@ class MemoryMapViewer;
+ 
+ namespace Core {
+ 
++// Returns the total guest physical memory budget (direct + flexible) in bytes.
++// On low-RAM hosts the budget is scaled down so the emulator does not overcommit.
++u64 GetTotalGuestMemoryBytes();
++
+ constexpr u64 DEFAULT_MAPPING_BASE = 0x200000000;
+ 
+ enum class MemoryProt : u32 {

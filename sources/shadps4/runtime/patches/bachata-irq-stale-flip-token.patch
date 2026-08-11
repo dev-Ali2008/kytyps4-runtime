@@ -1,0 +1,40 @@
+diff --git a/src/core/platform.h b/src/core/platform.h
+index b71d682..81181bf 100644
+--- a/src/core/platform.h
++++ b/src/core/platform.h
+@@ -48,10 +48,12 @@ struct IrqController {
+                    "Invalid IRQ number");
+         auto& ctx = irq_contexts.try_emplace(irq).first->second;
+         std::unique_lock lock{ctx.m_lock};
+-        const auto [it, inserted] =
+-            ctx.keyed_one_time_subscribers.try_emplace(token, std::move(handler));
+-        ASSERT_MSG(inserted, "Duplicate one-time IRQ token: irq={} token={}",
+-                   magic_enum::enum_name(irq), token);
++        auto& current = ctx.keyed_one_time_subscribers[token];
++        if (current) {
++            LOG_WARNING(Core, "Duplicate one-time IRQ token replaced: irq={} token={}",
++                        magic_enum::enum_name(irq), token);
++        }
++        current = std::move(handler);
+         ctx.last_registered_token = token;
+     }
+ 
+@@ -107,11 +109,13 @@ struct IrqController {
+         }
+ 
+         const auto it = ctx.keyed_one_time_subscribers.find(token);
+-        ASSERT_MSG(it != ctx.keyed_one_time_subscribers.end(),
+-                   "Unknown one-time IRQ token: irq={} token={} last_registered={} "
+-                   "last_completed={} pending={}",
+-                   magic_enum::enum_name(irq), token, ctx.last_registered_token,
+-                   ctx.last_completed_token, ctx.keyed_one_time_subscribers.size());
++        if (it == ctx.keyed_one_time_subscribers.end()) {
++            LOG_WARNING(Core, "Stale one-time IRQ token ignored: irq={} token={} last_registered={} "
++                              "last_completed={} pending={}",
++                        magic_enum::enum_name(irq), token, ctx.last_registered_token,
++                        ctx.last_completed_token, ctx.keyed_one_time_subscribers.size());
++            return;
++        }
+         it->second(irq);
+         ctx.last_completed_token = token;
+         ctx.keyed_one_time_subscribers.erase(it);

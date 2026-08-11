@@ -1,0 +1,316 @@
+diff --git a/src/core/libraries/ngs2/ngs2.cpp b/src/core/libraries/ngs2/ngs2.cpp
+index 97d19c3..dd10306 100644
+--- a/src/core/libraries/ngs2/ngs2.cpp
++++ b/src/core/libraries/ngs2/ngs2.cpp
+@@ -1,7 +1,10 @@
+ // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
++#include "common/io_file.h"
+ #include "common/logging/log.h"
++#include "common/singleton.h"
++#include "core/file_sys/fs.h"
+ #include "core/libraries/error_codes.h"
+ #include "core/libraries/libs.h"
+ #include "core/libraries/ngs2/ngs2.h"
+@@ -12,39 +15,292 @@
+ #include "core/libraries/ngs2/ngs2_pan.h"
+ #include "core/libraries/ngs2/ngs2_report.h"
+ 
++#include <cstring>
++#include <limits>
++#include <vector>
++
+ namespace Libraries::Ngs2 {
+ 
+ // Ngs2
+ 
++namespace {
++
++constexpr u32 WAVEFORM_TYPE_PCM8 = 0x11;
++constexpr u32 WAVEFORM_TYPE_PCM16 = 0x12;
++constexpr u32 WAVEFORM_TYPE_PCM24 = 0x13;
++constexpr u32 WAVEFORM_TYPE_PCM32 = 0x14;
++constexpr u32 WAVEFORM_TYPE_OGG = 0x15;
++constexpr u32 WAVEFORM_TYPE_ATRAC9 = 0x40;
++
++constexpr u32 DEFAULT_UNITS_PER_FRAME = 256;
++
++u32 ReadLE32(const u8* p) {
++    return u32(p[0]) | (u32(p[1]) << 8) | (u32(p[2]) << 16) | (u32(p[3]) << 24);
++}
++
++u16 ReadLE16(const u8* p) {
++    return u16(p[0]) | (u16(p[1]) << 8);
++}
++
++u32 BytesPerUnit(u32 waveformType) {
++    switch (waveformType) {
++    case WAVEFORM_TYPE_PCM8:
++        return 1;
++    case WAVEFORM_TYPE_PCM16:
++        return 2;
++    case WAVEFORM_TYPE_PCM24:
++        return 3;
++    case WAVEFORM_TYPE_PCM32:
++        return 4;
++    default:
++        return 2;
++    }
++}
++
++s32 ParseWaveformBuffer(const u8* data, size_t dataSize, OrbisNgs2WaveformInfo* outInfo) {
++    if (!outInfo) {
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_ADDRESS;
++    }
++    std::memset(outInfo, 0, sizeof(*outInfo));
++    if (!data || dataSize < 12) {
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++    }
++
++    // OGG/Vorbis detection
++    if (std::memcmp(data, "OggS", 4) == 0) {
++        if (dataSize < 28) {
++            return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++        }
++        const u8 numSegments = data[26];
++        if (dataSize < 27 + numSegments + 23) {
++            return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++        }
++        const u8* packet = data + 27 + numSegments;
++        if (std::memcmp(packet, "\x01vorbis", 7) != 0) {
++            return ORBIS_NGS2_ERROR_UNKNOWN_WAVEFORM_FORMAT;
++        }
++        const u8 channels = packet[11];
++        const u32 sampleRate = ReadLE32(packet + 12);
++
++        outInfo->format.waveformType = WAVEFORM_TYPE_OGG;
++        outInfo->format.numChannels = channels;
++        outInfo->format.sampleRate = sampleRate;
++        outInfo->format.configData = 0;
++        outInfo->format.frameOffset = 0;
++        outInfo->format.frameMargin = 0;
++        outInfo->dataOffset = 0;
++        outInfo->dataSize = static_cast<u32>(dataSize);
++        outInfo->numSamples = 0;
++        outInfo->audioUnitSize = channels * 2;
++        outInfo->numAudioUnitSamples = 1;
++        outInfo->numAudioUnitPerFrame = DEFAULT_UNITS_PER_FRAME;
++        outInfo->audioFrameSize = outInfo->audioUnitSize * DEFAULT_UNITS_PER_FRAME;
++        outInfo->numAudioFrameSamples = DEFAULT_UNITS_PER_FRAME;
++        outInfo->numDelaySamples = 0;
++        outInfo->numBlocks = 1;
++        outInfo->aBlock[0].dataOffset = 0;
++        outInfo->aBlock[0].dataSize = static_cast<u32>(dataSize);
++        outInfo->aBlock[0].numSamples = 0;
++        return ORBIS_OK;
++    }
++
++    // RIFF/WAVE detection
++    if (std::memcmp(data, "RIFF", 4) != 0 || std::memcmp(data + 8, "WAVE", 4) != 0) {
++        return ORBIS_NGS2_ERROR_UNKNOWN_WAVEFORM_FORMAT;
++    }
++
++    u32 audioFormat = 1;
++    u32 numChannels = 0;
++    u32 sampleRate = 0;
++    u32 bitsPerSample = 0;
++    u32 dataOffset = 0;
++    u32 dataChunkSize = 0;
++    bool foundData = false;
++
++    size_t pos = 12;
++    while (pos + 8 <= dataSize) {
++        const u32 chunkSize = ReadLE32(data + pos + 4);
++        const size_t chunkStart = pos + 8;
++        if (chunkStart + chunkSize > dataSize) {
++            break;
++        }
++        if (std::memcmp(data + pos, "fmt ", 4) == 0 && chunkSize >= 16) {
++            const u8* fmt = data + chunkStart;
++            audioFormat = ReadLE16(fmt);
++            numChannels = ReadLE16(fmt + 2);
++            sampleRate = ReadLE32(fmt + 4);
++            bitsPerSample = ReadLE16(fmt + 14);
++        } else if (std::memcmp(data + pos, "data", 4) == 0) {
++            dataOffset = static_cast<u32>(chunkStart);
++            dataChunkSize = chunkSize;
++            foundData = true;
++        }
++        pos = chunkStart + chunkSize + (chunkSize & 1);
++    }
++
++    if (!foundData || numChannels == 0 || sampleRate == 0) {
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++    }
++
++    u32 waveformType;
++    if (audioFormat == 3) {
++        waveformType = WAVEFORM_TYPE_PCM32;
++    } else if (audioFormat == 1) {
++        if (bitsPerSample == 8) {
++            waveformType = WAVEFORM_TYPE_PCM8;
++        } else if (bitsPerSample == 24) {
++            waveformType = WAVEFORM_TYPE_PCM24;
++        } else if (bitsPerSample == 32) {
++            waveformType = WAVEFORM_TYPE_PCM32;
++        } else {
++            waveformType = WAVEFORM_TYPE_PCM16;
++        }
++    } else if (audioFormat == 0xFFFE) {
++        waveformType = WAVEFORM_TYPE_PCM16;
++    } else {
++        return ORBIS_NGS2_ERROR_UNKNOWN_WAVEFORM_FORMAT;
++    }
++
++    const u32 frameBytes = (bitsPerSample / 8) * numChannels;
++    const u32 numSamples = frameBytes ? (dataChunkSize / frameBytes) : 0;
++
++    outInfo->format.waveformType = waveformType;
++    outInfo->format.numChannels = numChannels;
++    outInfo->format.sampleRate = sampleRate;
++    outInfo->format.configData = 0;
++    outInfo->format.frameOffset = 0;
++    outInfo->format.frameMargin = 0;
++    outInfo->dataOffset = dataOffset;
++    outInfo->dataSize = dataChunkSize;
++    outInfo->loopBeginPosition = 0;
++    outInfo->loopEndPosition = numSamples;
++    outInfo->numSamples = numSamples;
++    outInfo->audioUnitSize = frameBytes;
++    outInfo->numAudioUnitSamples = 1;
++    outInfo->numAudioUnitPerFrame = DEFAULT_UNITS_PER_FRAME;
++    outInfo->audioFrameSize = frameBytes * DEFAULT_UNITS_PER_FRAME;
++    outInfo->numAudioFrameSamples = DEFAULT_UNITS_PER_FRAME;
++    outInfo->numDelaySamples = 0;
++    outInfo->numBlocks = 1;
++    outInfo->aBlock[0].dataOffset = 0;
++    outInfo->aBlock[0].dataSize = dataChunkSize;
++    outInfo->aBlock[0].numRepeats = 0;
++    outInfo->aBlock[0].numSkipSamples = 0;
++    outInfo->aBlock[0].numSamples = numSamples;
++    return ORBIS_OK;
++}
++
++} // namespace
++
+ s32 PS4_SYSV_ABI sceNgs2CalcWaveformBlock(const OrbisNgs2WaveformFormat* format, u32 samplePos,
+                                           u32 numSamples, OrbisNgs2WaveformBlock* outBlock) {
+-    LOG_ERROR(Lib_Ngs2, "samplePos = {}, numSamples = {}", samplePos, numSamples);
++    if (!format || !outBlock) {
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_ADDRESS;
++    }
++    const u32 unitSize = BytesPerUnit(format->waveformType) * format->numChannels;
++    std::memset(outBlock, 0, sizeof(*outBlock));
++    outBlock->dataOffset = samplePos * unitSize;
++    outBlock->dataSize = numSamples * unitSize;
++    outBlock->numRepeats = 0;
++    outBlock->numSkipSamples = 0;
++    outBlock->numSamples = numSamples;
+     return ORBIS_OK;
+ }
+ 
+ s32 PS4_SYSV_ABI sceNgs2GetWaveformFrameInfo(const OrbisNgs2WaveformFormat* format,
+                                              u32* outFrameSize, u32* outNumFrameSamples,
+                                              u32* outUnitsPerFrame, u32* outNumDelaySamples) {
+-    LOG_ERROR(Lib_Ngs2, "called");
++    if (!format || !outFrameSize || !outNumFrameSamples || !outUnitsPerFrame || !outNumDelaySamples) {
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_ADDRESS;
++    }
++    const u32 unitSize = BytesPerUnit(format->waveformType) * format->numChannels;
++    *outFrameSize = unitSize * DEFAULT_UNITS_PER_FRAME;
++    *outNumFrameSamples = DEFAULT_UNITS_PER_FRAME;
++    *outUnitsPerFrame = DEFAULT_UNITS_PER_FRAME;
++    *outNumDelaySamples = 0;
+     return ORBIS_OK;
+ }
+ 
+ s32 PS4_SYSV_ABI sceNgs2ParseWaveformData(const void* data, size_t dataSize,
+                                           OrbisNgs2WaveformInfo* outInfo) {
+-    LOG_ERROR(Lib_Ngs2, "dataSize = {}", dataSize);
+-    return ORBIS_OK;
++    if (!data || !outInfo) {
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_ADDRESS;
++    }
++    const s32 result = ParseWaveformBuffer(static_cast<const u8*>(data), dataSize, outInfo);
++    LOG_INFO(Lib_Ngs2, "dataSize = {}, result = {:#x}", dataSize, result);
++    return result;
+ }
+ 
+ s32 PS4_SYSV_ABI sceNgs2ParseWaveformFile(const char* path, u64 offset,
+                                           OrbisNgs2WaveformInfo* outInfo) {
+-    LOG_ERROR(Lib_Ngs2, "path = {}, offset = {}", path, offset);
+-    return ORBIS_OK;
++    if (!path || !outInfo) {
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_ADDRESS;
++    }
++    const auto mnt = Common::Singleton<Core::FileSys::MntPoints>::Instance();
++    const auto filepath = mnt->GetHostPath(path);
++    if (filepath.empty()) {
++        LOG_ERROR(Lib_Ngs2, "Failed to resolve guest path {}", path);
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++    }
++    Common::FS::IOFile file(filepath, Common::FS::FileAccessMode::Read);
++    if (!file.IsOpen()) {
++        LOG_ERROR(Lib_Ngs2, "Failed to open {}", filepath.string());
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++    }
++    const u64 fileSize = file.GetSize();
++    if (offset >= fileSize) {
++        LOG_ERROR(Lib_Ngs2, "Invalid offset {} for file of size {}", offset, fileSize);
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++    }
++    const u64 readSize = fileSize - offset;
++    if (readSize > std::numeric_limits<size_t>::max() || readSize > 512_MB) {
++        LOG_ERROR(Lib_Ngs2, "File too large to parse: {}", readSize);
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_SIZE;
++    }
++    std::vector<u8> buffer(static_cast<size_t>(readSize));
++    if (!file.Seek(static_cast<s64>(offset))) {
++        LOG_ERROR(Lib_Ngs2, "Failed to seek in {}", filepath.string());
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++    }
++    const size_t got = file.Read(buffer);
++    if (got < 12) {
++        LOG_ERROR(Lib_Ngs2, "Failed to read {}", filepath.string());
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++    }
++    buffer.resize(got);
++    const s32 result = ParseWaveformBuffer(buffer.data(), got, outInfo);
++    LOG_INFO(Lib_Ngs2, "path = {}, offset = {}, result = {:#x}", path, offset, result);
++    return result;
+ }
+ 
+ s32 PS4_SYSV_ABI sceNgs2ParseWaveformUser(OrbisNgs2ParseReadHandler handler, uintptr_t userData,
+                                           OrbisNgs2WaveformInfo* outInfo) {
+-    LOG_ERROR(Lib_Ngs2, "userData = {}", userData);
+-    return ORBIS_OK;
++    if (!handler || !outInfo) {
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_ADDRESS;
++    }
++    std::vector<u8> buffer(64 * 1024);
++    size_t total = 0;
++    for (;;) {
++        if (total == buffer.size()) {
++            if (buffer.size() > 512_MB) {
++                return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_SIZE;
++            }
++            buffer.resize(buffer.size() * 2);
++        }
++        const s32 got = handler(userData, static_cast<u32>(total), buffer.data() + total,
++                                buffer.size() - total);
++        if (got <= 0) {
++            break;
++        }
++        total += static_cast<size_t>(got);
++    }
++    buffer.resize(total);
++    if (total < 12) {
++        return ORBIS_NGS2_ERROR_INVALID_WAVEFORM_DATA;
++    }
++    const s32 result = ParseWaveformBuffer(buffer.data(), total, outInfo);
++    LOG_INFO(Lib_Ngs2, "userData = {:#x}, bytes = {}, result = {:#x}", userData, total, result);
++    return result;
+ }
+ 
+ s32 PS4_SYSV_ABI sceNgs2RackCreate(OrbisNgs2Handle systemHandle, u32 rackId,

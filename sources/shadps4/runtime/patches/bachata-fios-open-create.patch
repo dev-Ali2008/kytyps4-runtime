@@ -1,0 +1,33 @@
+diff --git a/src/core/libraries/fios2/fios2.cpp b/src/core/libraries/fios2/fios2.cpp
+index 0815823..e3d62d1 100644
+--- a/src/core/libraries/fios2/fios2.cpp
++++ b/src/core/libraries/fios2/fios2.cpp
+@@ -150,7 +150,27 @@ s32 PS4_SYSV_ABI sceFiosFHOpenSync(const void* op_attr, s32* handle, const char*
+ s32 PS4_SYSV_ABI sceFiosFHOpenWithModeSync(const void* op_attr, s32* handle, const char* path,
+                                            const void* open_params, u16 mode) {
+     LOG_INFO(Lib_SysModule, "[FIOS-HLE][FHOpenWithModeSync] path='{}' mode={:#o}", path, mode);
+-    return sceFiosFHOpenSync(op_attr, handle, path, open_params);
++    if (handle == nullptr || path == nullptr) {
++        return -1;
++    }
++    // A non-zero mode with write permission bits signals the caller expects the
++    // file to be created if missing (e.g. first-time save data such as
++    // /savedata0/cw4settings.xml). Without O_CREAT the open fails with ENOENT and
++    // games that ignore the result dereference a null handle and crash.
++    const bool wants_write = (mode & 0222) != 0;
++    const s32 flags =
++        wants_write ? (Kernel::ORBIS_KERNEL_O_CREAT | Kernel::ORBIS_KERNEL_O_RDWR) : 0;
++    const s32 fd = Kernel::posix_open(path, flags, mode);
++    if (fd < 0) {
++        LOG_ERROR(Lib_SysModule, "[FIOS-HLE][FHOpenWithModeSync] failed path='{}'", path);
++        return fd;
++    }
++    *handle = fd;
++    LOG_INFO(Lib_SysModule,
++             "[FIOS-HLE][FHOpenWithModeSync] path='{}' handle={} mode={:#o} op_attr={} "
++             "open_params={}",
++             path, fd, mode, op_attr, open_params);
++    return 0;
+ }
+ 
+ s64 PS4_SYSV_ABI sceFiosFHReadSync(const void* op_attr, s32 handle, void* buffer, s64 size) {

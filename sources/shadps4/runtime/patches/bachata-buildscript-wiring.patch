@@ -1,0 +1,46 @@
+diff --git a/runtime/scripts/build-shadps4-arm64.sh b/runtime/scripts/build-shadps4-arm64.sh
+index c6bac5a..6541b1a 100755
+--- a/runtime/scripts/build-shadps4-arm64.sh
++++ b/runtime/scripts/build-shadps4-arm64.sh
+@@ -31,6 +31,18 @@ elif ! git -C "$project_root/externals/sdl3" apply --reverse --check "$sdl_patch
+   exit 1
+ fi
+ 
++for bachata_patch in \
++  "$project_root/runtime/patches/bachata-ngs2-waveform-parse.patch" \
++  "$project_root/runtime/patches/bachata-6gb-memory-autotune.patch"
++do
++  if git -C "$project_root" apply --check "$bachata_patch"; then
++    git -C "$project_root" apply "$bachata_patch"
++  elif ! git -C "$project_root" apply --reverse --check "$bachata_patch"; then
++    echo "Bachata patch $(basename "$bachata_patch") does not apply cleanly" >&2
++    exit 1
++  fi
++done
++
+ bash "$project_root/runtime/scripts/build-fexcore-smoke-aarch64.sh"
+ 
+ arm64_xext_lib=/usr/lib/aarch64-linux-gnu/libXext.so
+diff --git a/runtime/scripts/build-shadps4-x86_64.sh b/runtime/scripts/build-shadps4-x86_64.sh
+index 22b6890..65d0c88 100755
+--- a/runtime/scripts/build-shadps4-x86_64.sh
++++ b/runtime/scripts/build-shadps4-x86_64.sh
+@@ -45,6 +45,18 @@ elif ! git -C "$project_root/externals/sdl3" apply --reverse --check "$sdl_patch
+   exit 1
+ fi
+ 
++for bachata_patch in \
++  "$project_root/runtime/patches/bachata-ngs2-waveform-parse.patch" \
++  "$project_root/runtime/patches/bachata-6gb-memory-autotune.patch"
++do
++  if git -C "$project_root" apply --check "$bachata_patch"; then
++    git -C "$project_root" apply "$bachata_patch"
++  elif ! git -C "$project_root" apply --reverse --check "$bachata_patch"; then
++    echo "Bachata patch $(basename "$bachata_patch") does not apply cleanly" >&2
++    exit 1
++  fi
++done
++
+ cmake -S "$project_root" -B "$build_dir" -G Ninja \
+   -DCMAKE_BUILD_TYPE=Release \
+   -DCMAKE_INSTALL_PREFIX=/usr \

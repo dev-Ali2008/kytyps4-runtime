@@ -1,0 +1,76 @@
+diff --git a/src/core/libraries/kernel/time.cpp b/src/core/libraries/kernel/time.cpp
+index 2967dd4..e50f5cc 100644
+--- a/src/core/libraries/kernel/time.cpp
++++ b/src/core/libraries/kernel/time.cpp
+@@ -2,6 +2,7 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+ #include <ctime>
++#include <mutex>
+ #include <thread>
+ 
+ #include "common/assert.h"
+@@ -29,27 +30,38 @@
+ namespace Libraries::Kernel {
+ 
+ static u64 initial_ptc;
++static std::once_flag clock_init_flag;
+ static std::unique_ptr<Common::NativeClock> clock;
+ 
++// The kernel clock is normally created in RegisterTime, but host-side subsystems
++// (SDL audio, controller, videoout, mouse) may call the time syscalls from their
++// own threads as soon as they start, racing ahead of HLE library init. A null
++// clock used to crash in GetTimeUs (SIGSEGV on [this+0x10]) on cold first boot.
++// Initialize lazily and thread-safely so every caller always gets a valid clock.
++static Common::NativeClock& GetClock() {
++    std::call_once(clock_init_flag, [] { clock = std::make_unique<Common::NativeClock>(); });
++    return *clock;
++}
++
+ u64 PS4_SYSV_ABI sceKernelGetTscFrequency() {
+-    return clock->GetTscFrequency();
++    return GetClock().GetTscFrequency();
+ }
+ 
+ u64 PS4_SYSV_ABI sceKernelGetProcessTime() {
+     // TODO: this timer should support suspends, so initial ptc needs to be updated on wake up
+-    return clock->GetTimeUS(initial_ptc);
++    return GetClock().GetTimeUS(initial_ptc);
+ }
+ 
+ u64 PS4_SYSV_ABI sceKernelGetProcessTimeCounter() {
+-    return clock->GetUptime() - initial_ptc;
++    return GetClock().GetUptime() - initial_ptc;
+ }
+ 
+ u64 PS4_SYSV_ABI sceKernelGetProcessTimeCounterFrequency() {
+-    return clock->GetTscFrequency();
++    return GetClock().GetTscFrequency();
+ }
+ 
+ u64 PS4_SYSV_ABI sceKernelReadTsc() {
+-    return clock->GetUptime();
++    return GetClock().GetUptime();
+ }
+ 
+ static s32 posix_nanosleep_impl(const OrbisKernelTimespec* rqtp, OrbisKernelTimespec* rmtp,
+@@ -478,7 +490,7 @@ u64& GetInitialPtc() {
+ }
+ 
+ Common::NativeClock* GetClock() {
+-    return clock.get();
++    return &Libraries::Kernel::GetClock();
+ }
+ 
+ } // namespace Dev
+@@ -544,8 +556,8 @@ s32 PS4_SYSV_ABI sceKernelSettimeofday(OrbisKernelTimeval* _tv, OrbisKernelTimez
+ }
+ 
+ void RegisterTime(Core::Loader::SymbolsResolver* sym) {
+-    clock = std::make_unique<Common::NativeClock>();
+-    initial_ptc = clock->GetUptime();
++    GetClock(); // ensures the clock is ready before the guest starts
++    initial_ptc = GetClock().GetUptime();
+ 
+     // POSIX
+     LIB_FUNCTION("NhpspxdjEKU", "libkernel", 1, "libkernel", posix_nanosleep);

@@ -1,0 +1,22 @@
+diff --git a/src/core/libraries/save_data/save_instance.cpp b/src/core/libraries/save_data/save_instance.cpp
+index 463baa5..555c46a 100644
+--- a/src/core/libraries/save_data/save_instance.cpp
++++ b/src/core/libraries/save_data/save_instance.cpp
+@@ -190,6 +190,17 @@ void SaveInstance::SetupAndMount(bool read_only, bool copy_icon, bool ignore_cor
+     g_mnt->Mount(save_path, mount_point, read_only);
+     mounted = true;
+     this->read_only = read_only;
++
++    // Games (e.g. Binding of Isaac, Super Meat Boy) raw-open system files like
++    // /savedata0/inputconfigs.dat straight from the save root and crash on the
++    // null handle when they are missing. Real firmware always provides these,
++    // so create them here and let games fall back to default bindings.
++    for (const char* sys_file_name : {"inputconfigs.dat", "options.ini", "Options.bin"}) {
++        const auto sys_file = save_path / sys_file_name;
++        if (!fs::exists(sys_file)) {
++            Common::FS::IOFile f(sys_file, Common::FS::FileAccessMode::Create);
++        }
++    }
+ }
+ 
+ void SaveInstance::Umount() {

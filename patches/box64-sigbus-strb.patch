@@ -1,0 +1,42 @@
+diff --git a/src/libtools/sigtools.c b/src/libtools/sigtools.c
+index 4edb8a3b..260d44da 100644
+--- a/src/libtools/sigtools.c
++++ b/src/libtools/sigtools.c
+@@ -309,6 +309,37 @@ int sigbus_specialcases(siginfo_t* info, void * ucntx, void* pc, void* _fpsimd,
+         p->uc_mcontext.pc+=4;   // go to next opcode
+         return 1;
+     }
++    if((opcode&0b11111111110000000000000000000000)==0b00111001100000000000000000000000) {
++        // this is LDRB
++        int scale = (opcode>>30)&3;
++        int val = opcode&31;
++        int dest = (opcode>>5)&31;
++        uint64_t offset = (opcode>>10)&0b111111111111;
++        offset<<=scale;
++        volatile uint8_t* addr = (void*)(p->uc_mcontext.regs[dest] + offset);
++        if(is32bits) addr = (uint8_t*)(((uintptr_t)addr)&0xffffffff);
++        uint64_t value = 0;
++        for(int i=0; i<(1<<scale); ++i)
++            value |= ((uint64_t)addr[i]) << (i*8);
++        p->uc_mcontext.regs[val] = value;
++        p->uc_mcontext.pc+=4;   // go to next opcode
++        return 1;
++    }
++    if((opcode&0b11111111110000000000000000000000)==0b00111001000000000000000000000000) {
++        // this is STRB
++        int scale = (opcode>>30)&3;
++        int val = opcode&31;
++        int dest = (opcode>>5)&31;
++        uint64_t offset = (opcode>>10)&0b111111111111;
++        offset<<=scale;
++        volatile uint8_t* addr = (void*)(p->uc_mcontext.regs[dest] + offset);
++        if(is32bits) addr = (uint8_t*)(((uintptr_t)addr)&0xffffffff);
++        uint64_t value = p->uc_mcontext.regs[val];
++        for(int i=0; i<(1<<scale); ++i)
++            addr[i] = (value>>(i*8))&0xff;
++        p->uc_mcontext.pc+=4;   // go to next opcode
++        return 1;
++    }
+     if((opcode&0b11111111110000000000000000000000)==0b01111001000000000000000000000000) {
+         // this is STRH
+         int scale = (opcode>>30)&3;

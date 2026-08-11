@@ -1,0 +1,14 @@
+diff --git a/src/emu/x64syscall.c b/src/emu/x64syscall.c
+--- a/src/emu/x64syscall.c
++++ b/src/emu/x64syscall.c
+@@ -362,7 +362,7 @@
+     #ifdef __NR_close_range
+     [436] = {__NR_close_range, 3},
+     #endif
+     #ifdef __NR_faccessat2
+-    [439] = {__NR_faccessat2, 4},
++    [439] = {__NR_faccessat, 4},
+     #endif
+     #if defined(__NR_epoll_pwait2) && defined(NOALIGN)
+     [441] = {__NR_epoll_pwait2, 5},
+     #endif
