@@ -8,7 +8,7 @@
     },
     {
       "name": "glibc-2.43+r22+g8362e8ce10b2-2-aarch64.pkg.tar.xz",
-      "url": "https://de3.mirror.archlinuxarm.org/aarch64/core/glibc-2.43+r22+g8362e8ce10b2-2-aarch64.pkg.tar.xz",
+      "url": "http://mirror.archlinuxarm.org/aarch64/core/glibc-2.43+r22+g8362e8ce10b2-2-aarch64.pkg.tar.xz",
       "sha256": "8fac217e98c6e4342326726b2640ac254e8c82032f06f30bfa13ebbcc4fcb25b"
     },
     {
@@ -98,22 +98,22 @@
     },
     {
       "name": "libxss-1.2.5-1-aarch64.pkg.tar.xz",
-      "url": "https://de3.mirror.archlinuxarm.org/aarch64/extra/libxss-1.2.5-1-aarch64.pkg.tar.xz",
+      "url": "http://mirror.archlinuxarm.org/aarch64/extra/libxss-1.2.5-1-aarch64.pkg.tar.xz",
       "sha256": "1ebc34a29420166cb25040bfbff5d6ff732eff92de9cf07fcd92835e7d68bb9c"
     },
     {
       "name": "libxkbcommon-1.13.2-1-aarch64.pkg.tar.xz",
-      "url": "https://de3.mirror.archlinuxarm.org/aarch64/extra/libxkbcommon-1.13.2-1-aarch64.pkg.tar.xz",
+      "url": "http://mirror.archlinuxarm.org/aarch64/extra/libxkbcommon-1.13.2-1-aarch64.pkg.tar.xz",
       "sha256": "76b922d87d0af0011072b156464041ec5674f24ff1c78b7e85132fda72c9a7e7"
     },
     {
       "name": "dbus-1.16.2-1-aarch64.pkg.tar.xz",
-      "url": "https://de3.mirror.archlinuxarm.org/aarch64/core/dbus-1.16.2-1-aarch64.pkg.tar.xz",
+      "url": "http://mirror.archlinuxarm.org/aarch64/core/dbus-1.16.2-1-aarch64.pkg.tar.xz",
       "sha256": "1aa0bc2be4fa083ec0cb678f05223f55b0c8e498351ad781dc4b7a0987b62bcc"
     },
     {
       "name": "systemd-libs-261.2-1-aarch64.pkg.tar.xz",
-      "url": "https://de3.mirror.archlinuxarm.org/aarch64/core/systemd-libs-261.2-1-aarch64.pkg.tar.xz",
+      "url": "http://mirror.archlinuxarm.org/aarch64/core/systemd-libs-261.2-1-aarch64.pkg.tar.xz",
       "sha256": "27658b346c44b1e1c6d5965963a9f72957d08292b20ee65b264ea7e94494f800"
     },
     {
@@ -128,7 +128,7 @@
     },
     {
       "name": "vulkan-icd-loader-1.4.357.0-1-aarch64.pkg.tar.xz",
-      "url": "https://de3.mirror.archlinuxarm.org/aarch64/extra/vulkan-icd-loader-1.4.357.0-1-aarch64.pkg.tar.xz",
+      "url": "http://mirror.archlinuxarm.org/aarch64/extra/vulkan-icd-loader-1.4.357.0-1-aarch64.pkg.tar.xz",
       "sha256": "1163492a4ded4484623bd350b4ed69ed908b75520a6cb7a730695579a0e254e8"
     },
     {
@@ -138,17 +138,17 @@
     },
     {
       "name": "libstdc++-16.1.1+r12+g301eb08fa2c5-1-aarch64.pkg.tar.xz",
-      "url": "https://de3.mirror.archlinuxarm.org/aarch64/core/libstdc%2B%2B-16.1.1%2Br12%2Bg301eb08fa2c5-1-aarch64.pkg.tar.xz",
+      "url": "http://mirror.archlinuxarm.org/aarch64/core/libstdc%2B%2B-16.1.1%2Br12%2Bg301eb08fa2c5-1-aarch64.pkg.tar.xz",
       "sha256": "19832a38b2c4820695d28289f1c4f371955586d39fb893d8cbc0d8dbb09a4383"
     },
     {
       "name": "zlib-1:1.3.2-3-aarch64.pkg.tar.xz",
-      "url": "https://de3.mirror.archlinuxarm.org/aarch64/core/zlib-1%3A1.3.2-3-aarch64.pkg.tar.xz",
+      "url": "http://mirror.archlinuxarm.org/aarch64/core/zlib-1%3A1.3.2-3-aarch64.pkg.tar.xz",
       "sha256": "7e31b465e09e8e61375578b8e26ed883906e126e0c0ef1c75b7ccccfa95a58c4"
     },
     {
       "name": "libdrm-2.4.134-1-aarch64.pkg.tar.xz",
-      "url": "https://de3.mirror.archlinuxarm.org/aarch64/extra/libdrm-2.4.134-1-aarch64.pkg.tar.xz",
+      "url": "http://mirror.archlinuxarm.org/aarch64/extra/libdrm-2.4.134-1-aarch64.pkg.tar.xz",
       "sha256": "d4173d7adc60d32d389e44e976447962c31bc23ff9a2153539bd8ad766e307b8"
     }
   ],
