@@ -62,18 +62,36 @@ jobs:
           test "$(git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
 
           if [ -f "$GITHUB_WORKSPACE/.gitmodules" ]; then
-            echo "Manually cloning submodules..."
-            while IFS= read -r sub_path; do
-              sub_url=$(awk -v p="$sub_path" '$0 ~ "path = " p {getline; sub("^[[:space:]]*url = ", "", $0); print; exit}' .gitmodules)
-              test -n "$sub_url"
-              echo "Cloning $sub_path from $sub_url..."
+            echo "Cloning submodules from their declared URLs and branches..."
+            python3 - <<'PY' > /tmp/shadps4-submodules.tsv
+          import configparser
+          from pathlib import Path
+
+          config = configparser.ConfigParser()
+          config.read('.gitmodules')
+          for section in config.sections():
+              if not section.startswith('submodule '):
+                  continue
+              path = config[section].get('path', '').strip()
+              url = config[section].get('url', '').strip()
+              branch = config[section].get('branch', '').strip()
+              if path and url:
+                  print(f'{path}\t{url}\t{branch}')
+          PY
+            while IFS=$'\t' read -r sub_path sub_url sub_branch; do
+              test -n "$sub_path"
+              echo "Cloning $sub_path from $sub_url${sub_branch:+ (branch $sub_branch)}..."
               rm -rf "$sub_path"
               mkdir -p "$(dirname "$sub_path")"
-              git clone --depth 1 "$sub_url" "$sub_path"
+              clone_args=(--depth 1)
+              if [ -n "$sub_branch" ]; then
+                clone_args+=(--branch "$sub_branch")
+              fi
+              git clone "${clone_args[@]}" "$sub_url" "$sub_path"
               if [ -f "$sub_path/.gitmodules" ]; then
                 git -C "$sub_path" submodule update --init --recursive --depth 1
               fi
-            done < <(sed -n 's/^[[:space:]]*path = //p' .gitmodules)
+            done < /tmp/shadps4-submodules.tsv
           fi
 
       - name: Fetch box64 at the pinned revision
