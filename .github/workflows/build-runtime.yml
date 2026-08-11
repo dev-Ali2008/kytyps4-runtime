@@ -1,21 +1,5 @@
 name: Build Runtime zip
 
-# Regenerates runtime.zip from source entirely on GitHub — no PC needed.
-#
-# REPO LAYOUT REQUIRED BY THE BUILD SCRIPTS (canonical Bachata layout):
-#   <repo root>   = the shadps4 project (its CMakeLists.txt, src/, externals/
-#                   at the top level). Copy the CONTENTS of runtime/sources/shadps4/
-#                   to the repository root when you create this repo.
-#   <repo root>/runtime/  = this folder (scripts, patches, locks, sources/box64, ...)
-#
-# It runs the canonical cross-build pipeline (runtime/scripts/build-runtime-debian.sh)
-# inside a Debian Trixie container: cross-compiles shadps4 (x86_64 guest + aarch64),
-# box64 (aarch64), stages the Arch/glibc guest libraries, packages runtime.zip.
-#
-# Inputs:
-#   fast  - "true" builds a stub shadps4 (pipeline test only, ~20 min).
-#           "false" (default) does the full real shadps4 build (~1h+).
-
 on:
   push:
   workflow_dispatch:
@@ -46,14 +30,17 @@ jobs:
         run: |
           set -euo pipefail
           
-          # 1. Cleanly setup project files at root (preserving our fixed runtime/ folder)
-          if [ ! -f CMakeLists.txt ] && [ -f runtime/sources/shadps4/CMakeLists.txt ]; then
-            echo "Copying shadps4 project files..."
-            # Use find to copy everything EXCEPT the runtime folder and any .git folders
-            find runtime/sources/shadps4 -maxdepth 1 ! -name "runtime" ! -name "shadps4" ! -name ".git" -exec cp -at . {} +
+          echo "Setting up project files..."
+          # Copy everything from shadps4 source to root, EXCEPT the runtime folder (which we just deleted anyway)
+          if [ -d runtime/sources/shadps4 ]; then
+            cp -rp runtime/sources/shadps4/* .
+            [ -f runtime/sources/shadps4/.gitmodules ] && cp runtime/sources/shadps4/.gitmodules .
           fi
           
-          # 2. Freshly initialize git so 'git apply' and submodules work correctly
+          # Ensure no leftover .git directories are confusing things
+          find . -name ".git" -type d -not -path "./.git" -exec rm -rf {} + || true
+          
+          echo "Initializing fresh git repo for build..."
           rm -rf .git
           git init -q
           git config user.name ci
@@ -61,35 +48,14 @@ jobs:
           git add -A
           git commit -qm "bootstrap repo layout"
           
-          # 3. Robust manual submodule cloning
           if [ -f .gitmodules ]; then
-            echo "Manually cloning all submodules..."
-            
-            # Extract paths and URLs using basic string manipulation (no git config dependency)
+            echo "Manually cloning submodules..."
             grep "path =" .gitmodules | sed 's/.*path = //' | while read -r sub_path; do
                 sub_url=$(grep -A 2 "path = $sub_path" .gitmodules | grep "url =" | sed 's/.*url = //')
                 echo "Cloning $sub_path from $sub_url..."
                 rm -rf "$sub_path"
                 mkdir -p "$(dirname "$sub_path")"
-                for i in {1..3}; do
-                  git clone --depth 1 "$sub_url" "$sub_path" && break || {
-                    echo "Clone failed, retrying... ($i/3)"
-                    sleep 5
-                  }
-                done
-                
-                # Check for nested submodules in the newly cloned directory
-                if [ -f "$sub_path/.gitmodules" ]; then
-                   echo "Handling nested submodules in $sub_path..."
-                   grep "path =" "$sub_path/.gitmodules" | sed 's/.*path = //' | while read -r nested_path; do
-                      nested_url=$(grep -A 2 "path = $nested_path" "$sub_path/.gitmodules" | grep "url =" | sed 's/.*url = //')
-                      full_nested_path="$sub_path/$nested_path"
-                      echo "Cloning nested $full_nested_path from $nested_url..."
-                      rm -rf "$full_nested_path"
-                      mkdir -p "$(dirname "$full_nested_path")"
-                      git clone --depth 1 "$nested_url" "$full_nested_path" || true
-                   done
-                fi
+                git clone --depth 1 "$sub_url" "$sub_path" || true
             done
           fi
 
