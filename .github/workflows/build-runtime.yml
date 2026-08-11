@@ -51,33 +51,21 @@ jobs:
             cp -a runtime/sources/shadps4/. .
           fi
           
-          if [ -f .gitmodules ]; then
-            echo "Manually cloning submodules from .gitmodules..."
-            # Use git config to parse .gitmodules reliably
-            git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | while read -r key path; do
-                name=$(echo "$key" | sed 's/submodule\.\(.*\)\.path/\1/')
-                url=$(git config -f .gitmodules --get "submodule.${name}.url")
-                echo "Cloning $path from $url..."
-                rm -rf "$path"
-                mkdir -p "$(dirname "$path")"
-                # Use a retry loop for network stability
-                for i in {1..3}; do
-                  git clone --depth 1 "$url" "$path" && break || {
-                    echo "Clone failed, retrying in 5s... ($i/3)"
-                    sleep 5
-                  }
-                done
-            done
-          else
-            echo "No .gitmodules found, skipping manual clone."
-          fi
-          
-          # Initialize a git repo at the root so build scripts can use 'git apply'
+          # Initialize a git repo at the root so we can use git submodule commands
           git init -q
           git config user.name ci
           git config user.email ci@example.com
           git add -A
           git commit -qm "bootstrap repo layout"
+          
+          if [ -f .gitmodules ]; then
+            echo "Initializing and updating submodules recursively..."
+            # Using the official command but with --depth 1 for speed
+            # and --force to overwrite any existing empty directories
+            git submodule update --init --recursive --depth 1
+          else
+            echo "No .gitmodules found, skipping submodule init."
+          fi
 
       - name: Fetch box64 at the pinned revision
         run: |
