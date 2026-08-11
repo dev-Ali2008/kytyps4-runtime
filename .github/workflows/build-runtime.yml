@@ -36,6 +36,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install git
+        run: |
+          apt-get update
+          apt-get install -y git
+
       - name: Ensure shadps4 project files are at the repo root
         # The build scripts run `cmake -S "$project_root"` and
         # `git -C "$project_root" apply <patch>`, so the shadps4 project must be
