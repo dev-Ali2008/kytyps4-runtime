@@ -59,6 +59,8 @@ jobs:
             git init -q
             git add -A
             git -c user.name=ci -c user.email=ci@example.com commit -qm "bootstrap repo layout"
+            echo "Initializing and updating submodules..."
+            git submodule update --init --recursive --depth 1
           else
             echo "ERROR: shadps4 CMakeLists.txt not found at repo root or runtime/sources/shadps4" >&2
             exit 1
