@@ -9,8 +9,8 @@ if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
   exit 1
 fi
 
-runtime/scripts/build-shadps4-x86_64.sh
-runtime/scripts/build-box64-host.sh
+bash runtime/scripts/build-shadps4-x86_64.sh
+bash runtime/scripts/build-box64-host.sh
 bash runtime/scripts/build-shadps4-arm64.sh
 bash runtime/scripts/vendor-winlator.sh
 bash runtime/scripts/vendor-vortek.sh
