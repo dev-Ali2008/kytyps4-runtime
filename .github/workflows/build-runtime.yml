@@ -42,6 +42,7 @@ jobs:
         # at the root. If the repo root already IS the shadps4 project this is a
         # no-op; otherwise copy it from runtime/sources/shadps4 (copy, not
         # symlink — git apply refuses to write through symlinks).
+        shell: bash
         run: |
           set -euo pipefail
           if [ -f CMakeLists.txt ]; then
