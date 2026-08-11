@@ -30,23 +30,35 @@ jobs:
         run: |
           set -euo pipefail
           
+          # Fix git "dubious ownership" in container
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          
           echo "Setting up project files..."
-          # Copy everything from shadps4 source to root, EXCEPT the runtime folder (which we just deleted anyway)
-          if [ -d runtime/sources/shadps4 ]; then
-            cp -rp runtime/sources/shadps4/* .
-            [ -f runtime/sources/shadps4/.gitmodules ] && cp runtime/sources/shadps4/.gitmodules .
-          fi
+          # Use Python for a 100% reliable, cross-platform file setup
+          python3 -c "
+          import os, shutil
+          src = 'runtime/sources/shadps4'
+          dest = '.'
+          if os.path.exists(src):
+              for item in os.listdir(src):
+                  if item in ['.git', 'runtime']: continue
+                  s = os.path.join(src, item)
+                  d = os.path.join(dest, item)
+                  if os.path.isdir(s):
+                      if os.path.exists(d): shutil.rmtree(d)
+                      shutil.copytree(s, d, symlinks=True)
+                  else:
+                      shutil.copy2(s, d)
+          "
           
           # Ensure no leftover .git directories are confusing things
           find . -name ".git" -type d -not -path "./.git" -exec rm -rf {} + || true
           
-          echo "Initializing fresh git repo for build..."
-          rm -rf .git
-          git init -q
+          echo "Preparing git state for build..."
           git config user.name ci
           git config user.email ci@example.com
           git add -A
-          git commit -qm "bootstrap repo layout"
+          git commit -qm "bootstrap repo layout" || echo "No changes to commit"
           
           if [ -f .gitmodules ]; then
             echo "Manually cloning submodules..."
@@ -55,7 +67,12 @@ jobs:
                 echo "Cloning $sub_path from $sub_url..."
                 rm -rf "$sub_path"
                 mkdir -p "$(dirname "$sub_path")"
-                git clone --depth 1 "$sub_url" "$sub_path" || true
+                for i in {1..3}; do
+                  git clone --depth 1 "$sub_url" "$sub_path" && break || {
+                    echo "Clone failed, retrying... ($i/3)"
+                    sleep 5
+                  }
+                done
             done
           fi
 
