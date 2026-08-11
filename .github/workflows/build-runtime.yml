@@ -36,39 +36,50 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install git
+      - name: Install git and dependencies
         run: |
           apt-get update
-          apt-get install -y git
+          apt-get install -y git curl nodejs
 
-      - name: Ensure shadps4 project files are at the repo root
-        # The build scripts run `cmake -S "$project_root"` and
-        # `git -C "$project_root" apply <patch>`, so the shadps4 project must be
-        # at the root. If the repo root already IS the shadps4 project this is a
-        # no-op; otherwise copy it from runtime/sources/shadps4 (copy, not
-        # symlink — git apply refuses to write through symlinks).
+      - name: Ensure shadps4 project files and submodules are ready
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f CMakeLists.txt ]; then
-            echo "repo root is the shadps4 project: OK"
-          elif [ -f runtime/sources/shadps4/CMakeLists.txt ]; then
+          if [ ! -f CMakeLists.txt ] && [ -f runtime/sources/shadps4/CMakeLists.txt ]; then
             echo "copying shadps4 project files from runtime/sources/shadps4"
             shopt -s dotglob
             cp -a runtime/sources/shadps4/. .
-            git init -q
-            git add -A
-            git -c user.name=ci -c user.email=ci@example.com commit -qm "bootstrap repo layout"
-            echo "Initializing and updating submodules..."
-            git submodule update --init --recursive --depth 1
-          else
-            echo "ERROR: shadps4 CMakeLists.txt not found at repo root or runtime/sources/shadps4" >&2
-            exit 1
           fi
+          
+          if [ -f .gitmodules ]; then
+            echo "Manually cloning submodules from .gitmodules..."
+            # Use git config to parse .gitmodules reliably
+            git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | while read -r key path; do
+                name=$(echo "$key" | sed 's/submodule\.\(.*\)\.path/\1/')
+                url=$(git config -f .gitmodules --get "submodule.${name}.url")
+                echo "Cloning $path from $url..."
+                rm -rf "$path"
+                mkdir -p "$(dirname "$path")"
+                # Use a retry loop for network stability
+                for i in {1..3}; do
+                  git clone --depth 1 "$url" "$path" && break || {
+                    echo "Clone failed, retrying in 5s... ($i/3)"
+                    sleep 5
+                  }
+                done
+            done
+          else
+            echo "No .gitmodules found, skipping manual clone."
+          fi
+          
+          # Initialize a git repo at the root so build scripts can use 'git apply'
+          git init -q
+          git config user.name ci
+          git config user.email ci@example.com
+          git add -A
+          git commit -qm "bootstrap repo layout"
 
       - name: Fetch box64 at the pinned revision
-        # box64 is NOT pushed with the repo (a nested .git would make git treat
-        # it as a submodule). Clone it at the exact locked revision instead.
         run: |
           rm -rf runtime/sources/box64
           bash runtime/scripts/checkout-component.sh box64 https://github.com/ptitSeb/box64.git 50c8b90b09b433ab0767de44af2d0731cb0748b7
