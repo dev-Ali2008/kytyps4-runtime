@@ -29,51 +29,51 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          
-          # Fix git "dubious ownership" in container
+          cd "$GITHUB_WORKSPACE"
+          export GIT_CONFIG_NOSYSTEM=1
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          
+
           echo "Setting up project files..."
-          # Use Python for a 100% reliable, cross-platform file setup
-          python3 -c "
-          import os, shutil
-          src = 'runtime/sources/shadps4'
-          dest = '.'
-          if os.path.exists(src):
+          python3 - <<'PY'
+          import os
+          import shutil
+
+          src = os.path.join(os.environ["GITHUB_WORKSPACE"], "runtime", "sources", "shadps4")
+          dest = os.environ["GITHUB_WORKSPACE"]
+          if os.path.isdir(src):
               for item in os.listdir(src):
-                  if item in ['.git', 'runtime']: continue
-                  s = os.path.join(src, item)
-                  d = os.path.join(dest, item)
-                  if os.path.isdir(s):
-                      if os.path.exists(d): shutil.rmtree(d)
-                      shutil.copytree(s, d, symlinks=True)
+                  if item in {".git", "runtime"}:
+                      continue
+                  source = os.path.join(src, item)
+                  target = os.path.join(dest, item)
+                  if os.path.isdir(source) and not os.path.islink(source):
+                      shutil.copytree(source, target, symlinks=True, dirs_exist_ok=True)
                   else:
-                      shutil.copy2(s, d)
-          "
-          
-          # Ensure no leftover .git directories are confusing things
-          find . -name ".git" -type d -not -path "./.git" -exec rm -rf {} + || true
-          
-          echo "Preparing git state for build..."
-          git config user.name ci
-          git config user.email ci@example.com
-          git add -A
-          git commit -qm "bootstrap repo layout" || echo "No changes to commit"
-          
-          if [ -f .gitmodules ]; then
+                      shutil.copy2(source, target, follow_symlinks=False)
+          PY
+
+          echo "Initializing build repository..."
+          rm -rf "$GITHUB_WORKSPACE/.git"
+          git init -q "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" config user.name ci
+          git -C "$GITHUB_WORKSPACE" config user.email ci@example.com
+          git -C "$GITHUB_WORKSPACE" add -A
+          git -C "$GITHUB_WORKSPACE" commit -qm "bootstrap repo layout"
+          test "$(git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
+
+          if [ -f "$GITHUB_WORKSPACE/.gitmodules" ]; then
             echo "Manually cloning submodules..."
-            grep "path =" .gitmodules | sed 's/.*path = //' | while read -r sub_path; do
-                sub_url=$(grep -A 2 "path = $sub_path" .gitmodules | grep "url =" | sed 's/.*url = //')
-                echo "Cloning $sub_path from $sub_url..."
-                rm -rf "$sub_path"
-                mkdir -p "$(dirname "$sub_path")"
-                for i in {1..3}; do
-                  git clone --depth 1 "$sub_url" "$sub_path" && break || {
-                    echo "Clone failed, retrying... ($i/3)"
-                    sleep 5
-                  }
-                done
-            done
+            while IFS= read -r sub_path; do
+              sub_url=$(awk -v p="$sub_path" '$0 ~ "path = " p {getline; sub("^[[:space:]]*url = ", "", $0); print; exit}' .gitmodules)
+              test -n "$sub_url"
+              echo "Cloning $sub_path from $sub_url..."
+              rm -rf "$sub_path"
+              mkdir -p "$(dirname "$sub_path")"
+              git clone --depth 1 "$sub_url" "$sub_path"
+              if [ -f "$sub_path/.gitmodules" ]; then
+                git -C "$sub_path" submodule update --init --recursive --depth 1
+              fi
+            done < <(sed -n 's/^[[:space:]]*path = //p' .gitmodules)
           fi
 
       - name: Fetch box64 at the pinned revision
