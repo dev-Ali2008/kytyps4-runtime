@@ -315,6 +315,7 @@ install_dependencies_inside_debian() {
         libvulkan-dev:amd64
         libx11-dev:arm64
         libxext-dev:arm64
+        libvulkan-dev:arm64
     )
 
     arch_amd64=(
