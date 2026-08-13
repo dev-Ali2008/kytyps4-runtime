@@ -46,7 +46,8 @@ for bachata_patch in \
   "$project_root/runtime/patches/bachata-savedata-system-files.patch" \
   "$project_root/runtime/patches/bachata-clock-lazy-init.patch" \
   "$project_root/runtime/patches/bachata-fios-open-create.patch" \
-  "$project_root/runtime/patches/bachata-liverpool-stall-backoff.patch"
+  "$project_root/runtime/patches/bachata-liverpool-stall-backoff.patch" \
+  "$project_root/runtime/patches/bachata-fex-hle-unimplemented-returns-zero.patch"
 do
   if git -C "$project_root" apply --check "$bachata_patch"; then
     git -C "$project_root" apply "$bachata_patch"

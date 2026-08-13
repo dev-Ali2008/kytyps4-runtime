@@ -1,0 +1,87 @@
+diff --git a/src/core/guest_cpu/fex_hle_bridge.cpp b/src/core/guest_cpu/fex_hle_bridge.cpp
+index cc01821..0f32dea 100644
+--- a/src/core/guest_cpu/fex_hle_bridge.cpp
++++ b/src/core/guest_cpu/fex_hle_bridge.cpp
+@@ -64,7 +64,12 @@ Fex::EngineResult<bool> HleGuestBridge::Invoke(HleCallFrame& frame) {
+     if (adapter == nullptr) {
+         const HleCallFailure failure{ENOSYS, "unregistered HLE operation"};
+         Report(failure);
+-        return Fex::EngineFailure{Fex::EngineStage::Bridge, failure.error};
++        // An unregistered operation is by definition unimplemented; behave like
++        // the native backend's UnresolvedStub and return zero instead of
++        // escalating to a fatal guest fault (the guest would otherwise treat the
++        // negated error as a pointer and crash).
++        frame.gpr[0] = 0;
++        return true;
+     }
+     const auto trace_index = HleTraceCount.fetch_add(1, std::memory_order_relaxed);
+     const bool trace = trace_index < HleTraceLimit;
+@@ -91,6 +96,20 @@ Fex::EngineResult<bool> HleGuestBridge::Invoke(HleCallFrame& frame) {
+                          failure->error);
+         }
+         Report(*failure);
++        if (failure->error == ENOSYS) {
++            // Unimplemented functions (UnsupportedHleCallAdapter) must behave
++            // like the native backend's UnresolvedStub: return zero to the
++            // guest instead of escalating to a fatal guest fault. Games call
++            // sanitizer/telemetry stubs during init and treat the result as a
++            // pointer; Castlevania Anniversary Collection (CUSA15101) crashed
++            // dereferencing the negated ENOSYS on every boot. The failure is
++            // still reported above so it remains diagnosable in the log.
++            frame.gpr[0] = 0;
++            return true;
++        }
++        // Genuine faults from implemented adapters (ENOTSUP/EFAULT) still
++        // escalate: a zero return would read as "success" to the guest and
++        // silently corrupt state instead of surfacing the real defect.
+         return Fex::EngineFailure{Fex::EngineStage::Bridge, failure->error};
+     }
+     if (trace) {
+diff --git a/src/core/libraries/kernel/kernel.cpp b/src/core/libraries/kernel/kernel.cpp
+index e819b8f..a7653e3 100644
+--- a/src/core/libraries/kernel/kernel.cpp
++++ b/src/core/libraries/kernel/kernel.cpp
+@@ -260,6 +260,31 @@ void* PS4_SYSV_ABI sceKernelGetSanitizerNewReplaceExternal() {
+     return nullptr;
+ }
+ 
++void* PS4_SYSV_ABI sceKernelGetSanitizerNewReplace() {
++    LOG_TRACE(Kernel, "(STUBBED) sanitizer disabled, returning nullptr");
++    return nullptr;
++}
++
++// AddressSanitizer malloc-replacement hooks; same contract as the new-replace
++// hooks above. Castlevania Anniversary Collection (CUSA15101) calls
++// sceKernelGetSanitizerMallocReplaceExternal during boot and previously hit the
++// FEX ENOSYS fallback, then dereferenced that value as a pointer and crashed.
++void* PS4_SYSV_ABI sceKernelGetSanitizerMallocReplace() {
++    LOG_TRACE(Kernel, "(STUBBED) sanitizer disabled, returning nullptr");
++    return nullptr;
++}
++
++void* PS4_SYSV_ABI sceKernelGetSanitizerMallocReplaceExternal() {
++    LOG_TRACE(Kernel, "(STUBBED) sanitizer disabled, returning nullptr");
++    return nullptr;
++}
++
++// Sanitizer state probe; shipped games always run with the sanitizer disabled.
++s32 PS4_SYSV_ABI sceKernelIsAddressSanitizerEnabled() {
++    LOG_TRACE(Kernel, "(STUBBED) sanitizer disabled, returning false");
++    return 0;
++}
++
+ s32 PS4_SYSV_ABI sceKernelGetAllowedSdkVersionOnSystem(s32* ver) {
+     if (ver == nullptr) {
+         return ORBIS_KERNEL_ERROR_EINVAL;
+@@ -563,6 +588,11 @@ void RegisterLib(Core::Loader::SymbolsResolver* sym) {
+     LIB_FUNCTION("WhCc1w3EhSI", "libkernel", 1, "libkernel", _sceKernelSetThreadAtexitReport);
+     LIB_FUNCTION("bnZxYgAFeA0", "libkernel", 1, "libkernel",
+                  sceKernelGetSanitizerNewReplaceExternal);
++    LIB_FUNCTION("F4Kib3Mb0wI", "libkernel", 1, "libkernel", sceKernelGetSanitizerNewReplace);
++    LIB_FUNCTION("bt0POEUZddE", "libkernel", 1, "libkernel", sceKernelGetSanitizerMallocReplace);
++    LIB_FUNCTION("py6L8jiVAN8", "libkernel", 1, "libkernel",
++                 sceKernelGetSanitizerMallocReplaceExternal);
++    LIB_FUNCTION("jh+8XiK4LeE", "libkernel", 1, "libkernel", sceKernelIsAddressSanitizerEnabled);
+ }
+ 
+ } // namespace Libraries::Kernel

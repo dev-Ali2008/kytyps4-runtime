@@ -64,7 +64,12 @@ Fex::EngineResult<bool> HleGuestBridge::Invoke(HleCallFrame& frame) {
     if (adapter == nullptr) {
         const HleCallFailure failure{ENOSYS, "unregistered HLE operation"};
         Report(failure);
-        return Fex::EngineFailure{Fex::EngineStage::Bridge, failure.error};
+        // An unregistered operation is by definition unimplemented; behave like
+        // the native backend's UnresolvedStub and return zero instead of
+        // escalating to a fatal guest fault (the guest would otherwise treat the
+        // negated error as a pointer and crash).
+        frame.gpr[0] = 0;
+        return true;
     }
     const auto trace_index = HleTraceCount.fetch_add(1, std::memory_order_relaxed);
     const bool trace = trace_index < HleTraceLimit;
@@ -91,6 +96,20 @@ Fex::EngineResult<bool> HleGuestBridge::Invoke(HleCallFrame& frame) {
                          failure->error);
         }
         Report(*failure);
+        if (failure->error == ENOSYS) {
+            // Unimplemented functions (UnsupportedHleCallAdapter) must behave
+            // like the native backend's UnresolvedStub: return zero to the
+            // guest instead of escalating to a fatal guest fault. Games call
+            // sanitizer/telemetry stubs during init and treat the result as a
+            // pointer; Castlevania Anniversary Collection (CUSA15101) crashed
+            // dereferencing the negated ENOSYS on every boot. The failure is
+            // still reported above so it remains diagnosable in the log.
+            frame.gpr[0] = 0;
+            return true;
+        }
+        // Genuine faults from implemented adapters (ENOTSUP/EFAULT) still
+        // escalate: a zero return would read as "success" to the guest and
+        // silently corrupt state instead of surfacing the real defect.
         return Fex::EngineFailure{Fex::EngineStage::Bridge, failure->error};
     }
     if (trace) {

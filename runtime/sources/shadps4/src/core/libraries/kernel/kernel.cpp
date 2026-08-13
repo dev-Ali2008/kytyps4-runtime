@@ -260,6 +260,31 @@ void* PS4_SYSV_ABI sceKernelGetSanitizerNewReplaceExternal() {
     return nullptr;
 }
 
+void* PS4_SYSV_ABI sceKernelGetSanitizerNewReplace() {
+    LOG_TRACE(Kernel, "(STUBBED) sanitizer disabled, returning nullptr");
+    return nullptr;
+}
+
+// AddressSanitizer malloc-replacement hooks; same contract as the new-replace
+// hooks above. Castlevania Anniversary Collection (CUSA15101) calls
+// sceKernelGetSanitizerMallocReplaceExternal during boot and previously hit the
+// FEX ENOSYS fallback, then dereferenced that value as a pointer and crashed.
+void* PS4_SYSV_ABI sceKernelGetSanitizerMallocReplace() {
+    LOG_TRACE(Kernel, "(STUBBED) sanitizer disabled, returning nullptr");
+    return nullptr;
+}
+
+void* PS4_SYSV_ABI sceKernelGetSanitizerMallocReplaceExternal() {
+    LOG_TRACE(Kernel, "(STUBBED) sanitizer disabled, returning nullptr");
+    return nullptr;
+}
+
+// Sanitizer state probe; shipped games always run with the sanitizer disabled.
+s32 PS4_SYSV_ABI sceKernelIsAddressSanitizerEnabled() {
+    LOG_TRACE(Kernel, "(STUBBED) sanitizer disabled, returning false");
+    return 0;
+}
+
 s32 PS4_SYSV_ABI sceKernelGetAllowedSdkVersionOnSystem(s32* ver) {
     if (ver == nullptr) {
         return ORBIS_KERNEL_ERROR_EINVAL;
@@ -563,6 +588,11 @@ void RegisterLib(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("WhCc1w3EhSI", "libkernel", 1, "libkernel", _sceKernelSetThreadAtexitReport);
     LIB_FUNCTION("bnZxYgAFeA0", "libkernel", 1, "libkernel",
                  sceKernelGetSanitizerNewReplaceExternal);
+    LIB_FUNCTION("F4Kib3Mb0wI", "libkernel", 1, "libkernel", sceKernelGetSanitizerNewReplace);
+    LIB_FUNCTION("bt0POEUZddE", "libkernel", 1, "libkernel", sceKernelGetSanitizerMallocReplace);
+    LIB_FUNCTION("py6L8jiVAN8", "libkernel", 1, "libkernel",
+                 sceKernelGetSanitizerMallocReplaceExternal);
+    LIB_FUNCTION("jh+8XiK4LeE", "libkernel", 1, "libkernel", sceKernelIsAddressSanitizerEnabled);
 }
 
 } // namespace Libraries::Kernel

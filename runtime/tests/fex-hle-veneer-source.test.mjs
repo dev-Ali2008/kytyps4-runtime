@@ -85,6 +85,23 @@ test("FEX function imports use typed guest veneers rather than host addresses", 
   assert.match(bridgeSource, /HleGuestBridge::Invoke/);
   assert.match(bridgeSource, /BACHATA_FEX_HLE_BEGIN/);
   assert.match(bridgeSource, /BACHATA_FEX_HLE_END/);
+  // Unimplemented HLE calls must degrade to a zero return (like the native
+  // backend's UnresolvedStub) instead of escalating to a fatal guest fault.
+  // Games treat sanitizer/telemetry results as pointers and crashed on the
+  // FEX ENOSYS fallback (Castlevania Anniversary Collection CUSA15101). Only
+  // the not-implemented class (ENOSYS) is softened; genuine faults from
+  // implemented adapters (ENOTSUP/EFAULT) still escalate so they surface
+  // rather than reading as success to the guest.
+  assert.match(bridgeSource, /frame\.gpr\[0\] = 0;/);
+  assert.match(bridgeSource, /Report\(\*failure\);/);
+  assert.match(bridgeSource, /if \(failure->error == ENOSYS\)/);
+  assert.match(bridgeSource, /return Fex::EngineFailure\{Fex::EngineStage::Bridge, failure->error\};/);
+  assert.match(bridgeSource, /unregistered HLE operation/);
+  assert.ok(
+    bridgeSource.indexOf("frame.gpr[0] = 0;") <
+      bridgeSource.indexOf("return Fex::EngineFailure{Fex::EngineStage::Bridge, failure->error};"),
+    "benign zero-return must come before the fatal escalation path",
+  );
   assert.match(bridgeHeader, /struct HostRange/);
   assert.match(bridgeHeader, /std::shared_mutex host_range_mutex/);
   assert.match(bridgeSource, /HleGuestBridge::PublishHostRange/);
