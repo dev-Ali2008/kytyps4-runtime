@@ -668,7 +668,9 @@ class EmulationService : Service() {
     private fun runtimeEnvironment(runtimeRoot: Path, runtimeHome: Path, socketRoot: File, display: String) = mapOf(
         "HOME" to runtimeHome.toString(),
         "BOX64_PATH" to runtimeRoot.resolve("bin").toString(),
-        "BOX64_LOG" to "1",
+        // Keep verbose Box64 logging for debug APKs, but never pay its per-event
+        // formatting and write cost in the release gameplay path.
+        "BOX64_LOG" to if (BuildConfig.DEBUG) "1" else "0",
         "BOX64_LOAD_ADDR" to "0x6000000000",
         "BOX64_PREFER_WRAPPED" to "1",
         "BOX64_DYNAREC_CALLRET" to "1",
@@ -681,8 +683,10 @@ class EmulationService : Service() {
         "TMPDIR" to cacheDir.path,
         "XDG_CACHE_HOME" to File(cacheDir, "xdg").apply { mkdirs() }.path,
         "GLIBC_TUNABLES" to "glibc.pthread.rseq=0",
-        "BACHATA_VORTEK_TRACE_BIND_VERTEX_BUFFERS" to "1",
-        "BACHATA_FEX_TRACE_SIGSYS" to "1",
+        // These traces are diagnostic-only. They are expensive in a frame loop and
+        // remain available automatically in debug builds for troubleshooting.
+        "BACHATA_VORTEK_TRACE_BIND_VERTEX_BUFFERS" to if (BuildConfig.DEBUG) "1" else "0",
+        "BACHATA_FEX_TRACE_SIGSYS" to if (BuildConfig.DEBUG) "1" else "0",
     )
 
     /**
