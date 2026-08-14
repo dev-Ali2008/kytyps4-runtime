@@ -259,6 +259,10 @@ public:
       FEXCore::Config::Load();
       FEXCore::Config::Set(FEXCore::Config::CONFIG_IS64BIT_MODE, "1");
       FEXCore::Config::Set(FEXCore::Config::CONFIG_DISABLETELEMETRY, "1");
+      // Keep FEXCore's second-level translation lookup enabled. The upstream
+      // default disables it to save memory, but that increases lookup misses and
+      // can trigger avoidable retranslation stutter in large games.
+      FEXCore::Config::Set(FEXCore::Config::CONFIG_DISABLEL2CACHE, "0");
       const bool traceEnabled = std::getenv("BACHATA_FEX_TRACE") != nullptr;
       FEXCore::Config::Set(FEXCore::Config::CONFIG_X86DISASSEMBLE,
                            traceEnabled ? "1" : "0");
