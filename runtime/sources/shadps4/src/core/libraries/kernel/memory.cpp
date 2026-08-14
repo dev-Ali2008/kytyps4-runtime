@@ -57,8 +57,18 @@ s32 PS4_SYSV_ABI sceKernelAllocateDirectMemory(s64 searchStart, s64 searchEnd, u
         return ORBIS_KERNEL_ERROR_EINVAL;
     }
 
-    const bool is_in_range = searchEnd - searchStart >= len;
-    if (searchEnd <= searchStart || searchEnd < len || !is_in_range) {
+    if (searchEnd <= searchStart) {
+        LOG_ERROR(Kernel_Vmm,
+                  "Invalid address range! searchStart = {:#x}, searchEnd = {:#x}", searchStart,
+                  searchEnd);
+        return ORBIS_KERNEL_ERROR_EAGAIN;
+    }
+
+    // Both parameters are non-negative s64 values at this point. Convert the
+    // validated difference to u64 before comparing it with the unsigned length;
+    // this avoids signed/unsigned conversion surprises and preserves search_end.
+    const u64 available_range = static_cast<u64>(searchEnd - searchStart);
+    if (available_range < len) {
         LOG_ERROR(Kernel_Vmm,
                   "Provided address range is too small!"
                   " searchStart = {:#x}, searchEnd = {:#x}, length = {:#x}",

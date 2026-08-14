@@ -9,6 +9,7 @@ const read = (relative) => readFileSync(resolve(root, relative), "utf8");
 
 test("libkernel sanitizer replacement hooks return benign values instead of failing", () => {
   const kernel = read("src/core/libraries/kernel/kernel.cpp");
+  const memory = read("src/core/libraries/kernel/memory.cpp");
   const aerolib = read("src/core/aerolib/aerolib.inl");
 
   // Castlevania Anniversary Collection (CUSA15101) calls
@@ -24,7 +25,6 @@ test("libkernel sanitizer replacement hooks return benign values instead of fail
   assert.match(kernel, /void\* PS4_SYSV_ABI sceKernelGetSanitizerNewReplace\(\)/);
   assert.match(kernel, /void\* PS4_SYSV_ABI sceKernelGetSanitizerMallocReplace\(\)/);
   assert.match(kernel, /void\* PS4_SYSV_ABI sceKernelGetSanitizerMallocReplaceExternal\(\)/);
-  assert.match(kernel, /s32 PS4_SYSV_ABI sceKernelIsAddressSanitizerEnabled\(\)/);
 
   // Every shim must return a benign value (nullptr / false), never an error
   // code that the guest will interpret as a pointer.
@@ -41,5 +41,9 @@ test("libkernel sanitizer replacement hooks return benign values instead of fail
   assert.match(register, /LIB_FUNCTION\("bt0POEUZddE".*sceKernelGetSanitizerMallocReplace/s);
   assert.match(register, /LIB_FUNCTION\("F4Kib3Mb0wI".*sceKernelGetSanitizerNewReplace/s);
   assert.match(register, /LIB_FUNCTION\("bnZxYgAFeA0".*sceKernelGetSanitizerNewReplaceExternal/s);
-  assert.match(register, /LIB_FUNCTION\("jh\+8XiK4LeE".*sceKernelIsAddressSanitizerEnabled/s);
+  // The sanitizer-state function already belongs to memory.cpp; keep its
+  // implementation and resolver registration there to avoid duplicate symbols.
+  assert.match(memory, /u32 PS4_SYSV_ABI sceKernelIsAddressSanitizerEnabled\(\)/);
+  assert.match(memory, /LIB_FUNCTION\("jh\+8XiK4LeE".*sceKernelIsAddressSanitizerEnabled/s);
+  assert.doesNotMatch(kernel, /sceKernelIsAddressSanitizerEnabled\(\)/);
 });
