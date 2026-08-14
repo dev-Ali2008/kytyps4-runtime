@@ -27,6 +27,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <csetjmp>
 #include <cstring>
 #include <ctime>
@@ -43,6 +44,15 @@
 #include <vk_mem_alloc.h>
 
 namespace Vulkan {
+
+namespace {
+
+bool PresentTraceEnabled() {
+    const char* value = std::getenv("BACHATA_PRESENT_TRACE");
+    return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
+}
+
+} // namespace
 
 bool CanBlitToSwapchain(const vk::PhysicalDevice physical_device, vk::Format format) {
     const vk::FormatProperties props{physical_device.getFormatProperties(format)};
@@ -871,9 +881,12 @@ Frame* Presenter::PrepareBlankFrame(bool present_thread) {
 void Presenter::Present(Frame* frame, bool is_reusing_frame) {
     static std::atomic_uint32_t present_traces{};
     const u32 trace_id = present_traces.fetch_add(1, std::memory_order_relaxed);
-    // Log first 64, then every 16th, always around suspected 32-present boundary.
-    const bool trace = trace_id < 64 || (trace_id % 16u) == 0u ||
-                       (trace_id >= 28 && trace_id <= 40);
+    // This diagnostic path used to log first 64 frames and every 16th frame in
+    // every release session. Keep the sampling policy, but make the whole path
+    // opt-in so steady-state gameplay does not format and emit trace records.
+    const bool trace = PresentTraceEnabled() &&
+                       (trace_id < 64 || (trace_id % 16u) == 0u ||
+                        (trace_id >= 28 && trace_id <= 40));
     // Free the frame for reuse
     const auto free_frame = [&] {
         if (!is_reusing_frame) {

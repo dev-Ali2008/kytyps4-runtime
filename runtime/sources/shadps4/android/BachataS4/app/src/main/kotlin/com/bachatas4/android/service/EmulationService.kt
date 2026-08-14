@@ -687,6 +687,7 @@ class EmulationService : Service() {
         // remain available automatically in debug builds for troubleshooting.
         "BACHATA_VORTEK_TRACE_BIND_VERTEX_BUFFERS" to if (BuildConfig.DEBUG) "1" else "0",
         "BACHATA_FEX_TRACE_SIGSYS" to if (BuildConfig.DEBUG) "1" else "0",
+        "BACHATA_PRESENT_TRACE" to if (BuildConfig.DEBUG) "1" else "0",
     )
 
     /**
