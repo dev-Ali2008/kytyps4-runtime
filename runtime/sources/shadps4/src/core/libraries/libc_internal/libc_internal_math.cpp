@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cmath>
+#include <cstdlib>
+
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/libraries/error_codes.h"
@@ -94,6 +97,26 @@ double PS4_SYSV_ABI internal_pow(double x, double y) {
     return std::pow(x, y);
 }
 
+double PS4_SYSV_ABI internal_atof(const char* value) {
+    return std::atof(value);
+}
+
+double PS4_SYSV_ABI internal_fmod(double x, double y) {
+    return std::fmod(x, y);
+}
+
+double PS4_SYSV_ABI internal_ldexp(double x, s32 exponent) {
+    return std::ldexp(x, exponent);
+}
+
+s32 PS4_SYSV_ABI internal_rand() {
+    return std::rand();
+}
+
+void PS4_SYSV_ABI internal_srand(u32 seed) {
+    std::srand(seed);
+}
+
 float PS4_SYSV_ABI internal_powf(float x, float y) {
     return powf(x, y);
 }
@@ -126,6 +149,17 @@ void RegisterFexLibcMathAliases(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("GZWjF-YIFFk", "libc", 1, "libc", internal_asinf);
     LIB_FUNCTION("QI-x0SL8jhw", "libc", 1, "libc", internal_acosf);
     LIB_FUNCTION("EH-x713A99c", "libc", 1, "libc", internal_atan2f);
+    LIB_FUNCTION("T7uyNqP7vQA", "libc", 1, "libc", internal_tan);
+    LIB_FUNCTION("HUbZmOnT-Dg", "libc", 1, "libc", internal_atan2);
+    LIB_FUNCTION("9LCjpWyQ5Zc", "libc", 1, "libc", internal_pow);
+    LIB_FUNCTION("1D0H2KNjshE", "libc", 1, "libc", internal_powf);
+    LIB_FUNCTION("8zsu04XNsZ4", "libc", 1, "libc", internal_expf);
+    LIB_FUNCTION("wuAQt-j+p4o", "libc", 1, "libc", internal_exp2f);
+    LIB_FUNCTION("SRI6S9B+-a4", "libc", 1, "libc", internal_atof);
+    LIB_FUNCTION("pKwslsMUmSk", "libc", 1, "libc", internal_fmod);
+    LIB_FUNCTION("JrwFIMzKNr0", "libc", 1, "libc", internal_ldexp);
+    LIB_FUNCTION("cpCOXWMgha0", "libc", 1, "libc", internal_rand);
+    LIB_FUNCTION("VPbJwTCgME0", "libc", 1, "libc", internal_srand);
 }
 #endif
 

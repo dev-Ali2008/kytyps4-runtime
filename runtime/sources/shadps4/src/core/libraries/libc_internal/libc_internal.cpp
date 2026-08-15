@@ -29,6 +29,7 @@ void ForceRegisterLib(Core::Loader::SymbolsResolver* sym) {
     // Used to forcibly enable HLEs for broken LLE functions.
     ForceRegisterlibSceLibcInternalIo(sym);
 #ifdef SHADPS4_ENABLE_FEX_GUEST_CPU
+    RegisterFexLibcIoAliases(sym);
     RegisterFexLibcMemoryAliases(sym);
     RegisterFexLibcMathAliases(sym);
     RegisterFexLibcStrAliases(sym);

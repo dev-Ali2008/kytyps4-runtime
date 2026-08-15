@@ -479,6 +479,14 @@ void RegisterlibSceLibcInternalIo(Core::Loader::SymbolsResolver* sym) {
                  internal__Unlockfilelock);
 }
 
+#ifdef SHADPS4_ENABLE_FEX_GUEST_CPU
+void RegisterFexLibcIoAliases(Core::Loader::SymbolsResolver* sym) {
+    LIB_FUNCTION("xeYO4u7uyJ0", "libc", 1, "libc", internal_fopen);
+    LIB_FUNCTION("lbB+UlZqVG0", "libc", 1, "libc", internal_fread);
+    LIB_FUNCTION("uodLYyUip20", "libc", 1, "libc", internal_fclose);
+}
+#endif
+
 void ForceRegisterlibSceLibcInternalIo(Core::Loader::SymbolsResolver* sym) {
     // Goal is to be minimally intrusive here to allow LLE for printf/stdout writes.
     LIB_FUNCTION("xeYO4u7uyJ0", "libSceLibcInternal", 1, "libSceLibcInternal", internal_fopen);

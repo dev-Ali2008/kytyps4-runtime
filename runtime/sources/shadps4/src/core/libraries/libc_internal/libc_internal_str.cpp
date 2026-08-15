@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstring>
+#include <strings.h>
+
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/libraries/error_codes.h"
@@ -64,6 +67,30 @@ const char* PS4_SYSV_ABI internal_strchr(const char* str, int c) {
     return std::strchr(str, c);
 }
 
+char* PS4_SYSV_ABI internal_strstr(char* haystack, const char* needle) {
+    return std::strstr(haystack, needle);
+}
+
+const char* PS4_SYSV_ABI internal_strrchr(const char* str, int c) {
+    return std::strrchr(str, c);
+}
+
+char* PS4_SYSV_ABI internal_strncat(char* dest, const char* src, size_t count) {
+    return std::strncat(dest, src, count);
+}
+
+char* PS4_SYSV_ABI internal_strtok(char* str, const char* delimiters) {
+    return std::strtok(str, delimiters);
+}
+
+s32 PS4_SYSV_ABI internal_strcasecmp(const char* lhs, const char* rhs) {
+    return ::strcasecmp(lhs, rhs);
+}
+
+s32 PS4_SYSV_ABI internal_strncasecmp(const char* lhs, const char* rhs, size_t count) {
+    return ::strncasecmp(lhs, rhs, count);
+}
+
 void RegisterlibSceLibcInternalStr(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("5Xa2ACNECdo", "libSceLibcInternal", 1, "libSceLibcInternal", internal_strcpy_s);
     LIB_FUNCTION("K+gcnFFJKVc", "libSceLibcInternal", 1, "libSceLibcInternal", internal_strcat_s);
@@ -82,6 +109,15 @@ void RegisterFexLibcStrAliases(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("Ls4tzzhimqQ", "libc", 1, "libc", internal_strcat);
     LIB_FUNCTION("j4ViWNHEgww", "libc", 1, "libc", internal_strlen);
     LIB_FUNCTION("Ovb2dSJOAuE", "libc", 1, "libc", internal_strcmp);
+    LIB_FUNCTION("aesyjrHVWy4", "libc", 1, "libc", internal_strncmp);
+    LIB_FUNCTION("6sJWiWSRuqk", "libc", 1, "libc", internal_strncpy);
+    LIB_FUNCTION("ob5xAW4ln-0", "libc", 1, "libc", internal_strchr);
+    LIB_FUNCTION("viiwFMaNamA", "libc", 1, "libc", internal_strstr);
+    LIB_FUNCTION("9yDWMxEFdJU", "libc", 1, "libc", internal_strrchr);
+    LIB_FUNCTION("kHg45qPC6f0", "libc", 1, "libc", internal_strncat);
+    LIB_FUNCTION("oVkZ8W8-Q8A", "libc", 1, "libc", internal_strtok);
+    LIB_FUNCTION("AV6ipCNa4Rw", "libc", 1, "libc", internal_strcasecmp);
+    LIB_FUNCTION("pXvbDfchu6k", "libc", 1, "libc", internal_strncasecmp);
 }
 #endif
 

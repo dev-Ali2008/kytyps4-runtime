@@ -19,6 +19,10 @@ void* PS4_SYSV_ABI internal_memcpy(void* dest, const void* src, size_t n) {
     return std::memcpy(dest, src, n);
 }
 
+void* PS4_SYSV_ABI internal_memmove(void* dest, const void* src, size_t n) {
+    return std::memmove(dest, src, n);
+}
+
 s32 PS4_SYSV_ABI internal_memcpy_s(void* dest, size_t destsz, const void* src, size_t count) {
 #ifdef _WIN64
     return memcpy_s(dest, destsz, src, count);
@@ -68,6 +72,7 @@ size_t PS4_SYSV_ABI internal_sceLibcMspaceMallocUsableSize(void* pointer) {
 #ifdef SHADPS4_ENABLE_FEX_GUEST_CPU
 void RegisterFexLibcMemoryAliases(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("Q3VBxCXhUHs", "libc", 1, "libc", internal_memcpy);
+    LIB_FUNCTION("+P6FRGH4LfA", "libc", 1, "libc", internal_memmove);
     LIB_FUNCTION("8zTFvBIAIN8", "libc", 1, "libc", internal_memset);
     LIB_FUNCTION("DfivPArhucg", "libc", 1, "libc", internal_memcmp);
 }
