@@ -61,6 +61,78 @@ jobs:
           git -C "$GITHUB_WORKSPACE" commit -qm "bootstrap repo layout"
           test "$(git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
 
+          git_retry() {
+            local attempt=1
+            local max_attempts=5
+            while true; do
+              if GIT_TERMINAL_PROMPT=0 git -c http.version=HTTP/1.1 -c protocol.version=2 "$@"; then
+                return 0
+              fi
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                return 1
+              fi
+              echo "Git network operation failed (attempt $attempt/$max_attempts); retrying..." >&2
+              sleep $((attempt * 10))
+              attempt=$((attempt + 1))
+            done
+          }
+
+          clone_retry() {
+            local destination=$1
+            shift
+            local attempt=1
+            local max_attempts=5
+            while true; do
+              rm -rf "$destination"
+              if git_retry clone --no-tags "$@" "$destination"; then
+                return 0
+              fi
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                return 1
+              fi
+              echo "Clone failed (attempt $attempt/$max_attempts); retrying from a clean directory..." >&2
+              sleep $((attempt * 10))
+              attempt=$((attempt + 1))
+            done
+          }
+
+          fetch_mesa_archive() {
+            local parent=$1
+            local mesa_path="$parent/externals/mesa"
+            local mesa_revision
+            local mesa_url
+            local archive
+            mesa_revision=$(git -C "$parent" ls-tree HEAD -- externals/mesa | awk '{print $3}')
+            mesa_url=$(git -C "$parent" config -f .gitmodules --get submodule.externals/mesa.url)
+            if [ -z "$mesa_revision" ] || [ -z "$mesa_url" ]; then
+              echo "Unable to derive the pinned nested Mesa revision or URL" >&2
+              return 1
+            fi
+            archive=$(mktemp)
+            echo "Falling back to the exact Mesa commit archive $mesa_revision..."
+            curl --fail --location --silent --show-error --retry 6 --retry-all-errors \
+              --retry-delay 10 "${mesa_url%.git}/-/archive/$mesa_revision/mesa-$mesa_revision.tar.gz" \
+              --output "$archive"
+            rm -rf "$mesa_path"
+            mkdir -p "$mesa_path"
+            tar -xzf "$archive" --strip-components=1 -C "$mesa_path"
+            rm -f "$archive"
+            test -f "$mesa_path/meson.build"
+          }
+
+          fetch_nested_submodules() {
+            local parent=$1
+            if git_retry -C "$parent" submodule update --init --recursive --depth 1 --jobs 1; then
+              return 0
+            fi
+            if [ -f "$parent/.gitmodules" ] && grep -q 'path = externals/mesa' "$parent/.gitmodules"; then
+              git -C "$parent" submodule deinit -f --all || true
+              fetch_mesa_archive "$parent"
+              return 0
+            fi
+            return 1
+          }
+
           if [ -f "$GITHUB_WORKSPACE/.gitmodules" ]; then
             echo "Cloning submodules from their declared URLs and branches..."
             python3 - <<'PY' > /tmp/shadps4-submodules.tsv
@@ -87,9 +159,9 @@ jobs:
               if [ -n "$sub_branch" ]; then
                 clone_args+=(--branch "$sub_branch")
               fi
-              git clone "${clone_args[@]}" "$sub_url" "$sub_path"
+              clone_retry "$sub_path" "${clone_args[@]}" "$sub_url"
               if [ -f "$sub_path/.gitmodules" ]; then
-                git -C "$sub_path" submodule update --init --recursive --depth 1
+                fetch_nested_submodules "$sub_path"
               fi
             done < /tmp/shadps4-submodules.tsv
           fi
