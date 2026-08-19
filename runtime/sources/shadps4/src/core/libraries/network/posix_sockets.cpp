@@ -593,7 +593,7 @@ int PosixSocket::SetSocketOptions(int level, int optname, const void* optval, u3
         }
     }
 
-    UNREACHABLE_MSG("Unknown level ={} optname ={}", level, optname);
+    LOG_WARNING(Lib_Net, "Unknown setsockopt level={} optname={}", level, optname);
     return 0;
 }
 
@@ -672,8 +672,8 @@ int PosixSocket::GetSocketOptions(int level, int optname, void* optval, u32* opt
             CASE_GETSOCKOPT_VALUE(ORBIS_NET_TCP_MSS_TO_ADVERTISE, sockopt_tcp_mss_to_advertise);
         }
     }
-    UNREACHABLE_MSG("Unknown level ={} optname ={}", level, optname);
-    return 0;
+    LOG_WARNING(Lib_Net, "Unknown getsockopt level={} optname={}", level, optname);
+    return -1;
 }
 
 int PosixSocket::GetPeerName(OrbisNetSockaddr* name, u32* namelen) {

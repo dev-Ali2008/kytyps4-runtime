@@ -631,18 +631,22 @@ Frame* Presenter::PrepareLastFrame() {
 
     Frame* frame = last_submit_frame;
 
-    while (true) {
+    // 200ms timeout instead of 10s. A stalled PrepareLastFrame blocks the entire
+    // render pipeline; on Snapdragon 855 this causes visible frame drops.
+    static constexpr u64 kPrepareFenceTimeoutNs = 200'000'000ULL; // 200ms
+    static constexpr int kPrepareMaxRetries = 2;
+    for (int retry = 0; retry < kPrepareMaxRetries; ++retry) {
         vk::Result result = instance.GetDevice().waitForFences(frame->present_done, false,
-                                                               std::numeric_limits<u64>::max());
+                                                               kPrepareFenceTimeoutNs);
         if (result == vk::Result::eSuccess) {
             break;
         }
         if (result == vk::Result::eTimeout) {
+            LOG_WARNING(Render_Vulkan, "waitForFences timeout in PrepareLastFrame (retry {}/{})",
+                        retry + 1, kPrepareMaxRetries);
             continue;
         }
         if (result == vk::Result::eErrorDeviceLost) {
-            // Soft-fail: hard ASSERT became exit 133 on Mali after first game frame.
-            // Returning the frame lets Present discover device-lost on acquire/present.
             LOG_CRITICAL(Render_Vulkan, "Device lost during waiting for a frame (PrepareLastFrame)");
             break;
         }
@@ -1192,36 +1196,34 @@ Frame* Presenter::GetRenderFrame() {
                  frame ? frame->ready_tick : 0);
     }
 
-    const auto wait = [&]() {
-        result = device.waitForFences(frame->present_done, false, std::numeric_limits<u64>::max());
-        return result;
-    };
-
-    // Wait for the presentation to be finished so all frame resources are free
-    while (wait() != vk::Result::eSuccess) {
-        // Retry if the waiting times out
-        if (result == vk::Result::eTimeout) {
-            continue;
+    // Wait with a 100ms timeout instead of infinite. If the fence doesn't signal
+    // in 100ms the GPU is likely stalled; drop this frame to avoid blocking the
+    // guest entirely. On Snapdragon 855 an infinite wait can freeze the whole
+    // emulator for seconds during scene transitions.
+    static constexpr u64 kFenceWaitTimeoutNs = 100'000'000ULL; // 100ms
+    static constexpr int kMaxFenceWaitRetries = 3;
+    for (int retry = 0; retry < kMaxFenceWaitRetries; ++retry) {
+        result = device.waitForFences(frame->present_done, false, kFenceWaitTimeoutNs);
+        if (result == vk::Result::eSuccess) {
+            break;
         }
         if (result == vk::Result::eErrorDeviceLost) {
-            // Soft-fail on Mali/Vortek: ASSERT_MSG here was exit 133 after the first
-            // real EOP flip. Return the frame so Present can soft-fail acquire/present
-            // and the session can stop without an immediate trap.
-            // Client-side snapshot header; server dumps live alloc map via
-            // DEVICE_LOST_SNAPSHOT in libbachata_vortek_server (logcat Bachata.Vortek.GpuTrack).
             static std::atomic<bool> device_lost_snapshot_logged{false};
             const u32 flip_num = DebugState.GetFrameNum();
             LOG_CRITICAL(Render_Vulkan, "Device lost during waiting for a frame (GetRenderFrame)");
             if (!device_lost_snapshot_logged.exchange(true)) {
                 LOG_CRITICAL(Render_Vulkan,
                              "DEVICE_LOST_SNAPSHOT where=GetRenderFrame lastPresent={} "
-                             "currentFrameId={} frameSize={}x{} hdr={} "
-                             "flipFrameNum={} (server alloc dump in logcat tag "
-                             "Bachata.Vortek.GpuTrack)",
+                             "currentFrameId={} frameSize={}x{} hdr={} flipFrameNum={}",
                              flip_num, frame ? int(frame->id) : -1, frame ? frame->width : 0,
                              frame ? frame->height : 0, frame && frame->is_hdr ? 1 : 0, flip_num);
             }
             break;
+        }
+        if (result == vk::Result::eTimeout) {
+            LOG_WARNING(Render_Vulkan, "waitForFences timeout in GetRenderFrame (retry {}/{})",
+                        retry + 1, kMaxFenceWaitRetries);
+            continue;
         }
         LOG_ERROR(Render_Vulkan, "Unexpected waitForFences result in GetRenderFrame: {}",
                   vk::to_string(result));

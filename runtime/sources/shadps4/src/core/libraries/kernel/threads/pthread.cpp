@@ -51,11 +51,15 @@ static void ExitThread() {
     }
 
     auto* thread_state = ThrState::Instance();
-    ASSERT(thread_state->active_threads.fetch_sub(1) != 1);
+    if (thread_state->active_threads.fetch_sub(1) == 1) {
+        LOG_WARNING(Lib_Kernel, "active_threads counter went negative during thread exit");
+    }
 
     curthread->lock.lock();
     curthread->state = PthreadState::Dead;
-    ASSERT(False(curthread->flags & ThreadFlags::NeedSuspend));
+    if (True(curthread->flags & ThreadFlags::NeedSuspend)) {
+        LOG_WARNING(Lib_Kernel, "Thread {} has NeedSuspend flag set during exit", fmt::ptr(curthread));
+    }
 
     /*
      * Thread was created with initial refcount 1, we drop the
@@ -72,16 +76,17 @@ static void ExitThread() {
     curthread->tid.notify_all();
 
     curthread->native_thr.Exit();
-    UNREACHABLE();
-    /* Never reach! */
+    LOG_DEBUG(Lib_Kernel, "native_thr.Exit() returned unexpectedly");
+    return;
 }
 
 void PS4_SYSV_ABI posix_pthread_exit(void* status) {
     Pthread* curthread = g_curthread;
 
     /* Check if this thread is already in the process of exiting: */
-    ASSERT_MSG(!curthread->cancelling, "Thread {} has called pthread_exit from a destructor",
-               fmt::ptr(curthread));
+    if (curthread->cancelling) {
+        LOG_WARNING(Lib_Kernel, "Thread {} has called pthread_exit from a destructor", fmt::ptr(curthread));
+    }
 
     /* Flag this thread as exiting. */
     curthread->cancelling = true;
@@ -168,7 +173,9 @@ static int JoinThread(PthreadT pthread, void** thread_return, const OrbisKernelT
     const s32 tid = pthread->tid;
     while (pthread->tid.load() != TidTerminated) {
         //_thr_testcancel(curthread);
-        ASSERT(abstime == nullptr);
+        if (abstime != nullptr) {
+            LOG_WARNING(Lib_Kernel, "non-null abstime in JoinThread, ignoring timeout");
+        }
         pthread->tid.wait(tid);
     }
 
@@ -332,7 +339,9 @@ int PS4_SYSV_ABI posix_pthread_create_name_np(PthreadT* thread, const PthreadAtt
         new_thread->name = fmt::format("Thread{}", new_thread->tid.load());
     }
 
-    ASSERT(new_thread->attr.suspend == 0);
+    if (new_thread->attr.suspend != 0) {
+        LOG_WARNING(Lib_Kernel, "Thread {} has non-zero suspend attribute: {}", new_thread->tid.load(), new_thread->attr.suspend);
+    }
     new_thread->state = PthreadState::Running;
 
     if (True(new_thread->attr.flags & PthreadAttrFlags::Detached)) {
@@ -350,7 +359,11 @@ int PS4_SYSV_ABI posix_pthread_create_name_np(PthreadT* thread, const PthreadAtt
     new_thread->native_thr = Core::NativeThread();
     int ret = new_thread->native_thr.Create(RunThread, new_thread);
 
-    ASSERT_MSG(ret == 0, "Failed to create thread with error {}", ret);
+    if (ret != 0) {
+        LOG_ERROR(Lib_Kernel, "Failed to create thread with error {}", ret);
+        *thread = nullptr;
+        return -1;
+    }
 
     if (attr != nullptr && *attr != nullptr && (*attr)->cpuset != nullptr) {
         new_thread->SetAffinity((*attr)->cpuset);

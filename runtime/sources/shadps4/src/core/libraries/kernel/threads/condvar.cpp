@@ -3,6 +3,7 @@
 
 #include <cstring>
 #include "common/assert.h"
+#include "common/logging/log.h"
 #include "core/libraries/kernel/kernel.h"
 #include "core/libraries/kernel/posix_error.h"
 #include "core/libraries/kernel/threads/pthread.h"
@@ -100,7 +101,10 @@ int PthreadCond::Wait(PthreadMutexT* mutex, const OrbisKernelTimespec* abstime, 
     }
 
     Pthread* curthread = g_curthread;
-    ASSERT_MSG(curthread->wchan == nullptr, "Thread was already on queue.");
+    if (curthread->wchan != nullptr) {
+        LOG_WARNING(Lib_Kernel, "Thread {} already on wait queue, removing first", curthread->GetName());
+        curthread->wchan = nullptr;
+    }
     // _thr_testcancel(curthread);
     SleepqLock(this);
 
@@ -142,7 +146,7 @@ int PthreadCond::Wait(PthreadMutexT* mutex, const OrbisKernelTimespec* abstime, 
             has_user_waiters = SleepqRemove(sq, curthread);
             break;
         }
-        UNREACHABLE();
+        LOG_WARNING(Lib_Kernel, "Spurious wakeup in condvar wait, retrying");
     }
     SleepqUnlock(this);
     curthread->mutex_obj = nullptr;

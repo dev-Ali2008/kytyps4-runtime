@@ -423,7 +423,7 @@ static Error saveDataMount(const OrbisSaveDataMount2* mount_info,
                                (int)mount_info->blocks};
 
     if (save_instance.Mounted()) {
-        UNREACHABLE_MSG("Save instance should not be mounted");
+        LOG_WARNING(Lib_SaveData, "Save instance already mounted, proceeding anyway");
     }
 
     if (!create && !create_if_not_exist && !save_instance.Exists()) {
@@ -831,7 +831,7 @@ Error PS4_SYSV_ABI sceSaveDataDirNameSearch(const OrbisSaveDataDirNameSearchCond
         PSF sfo;
         if (!sfo.Open(sfo_path)) {
             LOG_ERROR(Lib_SaveData, "Failed to read SFO: {}", fmt::UTF(sfo_path.u8string()));
-            ASSERT_MSG(false, "Failed to read SFO");
+            return Error::INTERNAL;
         }
 
         size_t size = Common::FS::GetDirectorySize(dir_path);
@@ -1044,7 +1044,10 @@ Error PS4_SYSV_ABI sceSaveDataGetParam(const OrbisSaveDataMountPoint* mountPoint
     switch (paramType) {
     case OrbisSaveDataParamType::ALL: {
         const auto param = static_cast<OrbisSaveDataParam*>(paramBuf);
-        ASSERT(paramBufSize == sizeof(OrbisSaveDataParam));
+        if (paramBufSize != sizeof(OrbisSaveDataParam)) {
+            LOG_WARNING(Lib_SaveData, "paramBufSize mismatch: {} != {}", paramBufSize, sizeof(OrbisSaveDataParam));
+            return Error::PARAMETER;
+        }
         param->FromSFO(*param_sfo);
         if (gotSize != nullptr) {
             *gotSize = sizeof(OrbisSaveDataParam);
@@ -1444,7 +1447,10 @@ Error PS4_SYSV_ABI sceSaveDataSetParam(const OrbisSaveDataMountPoint* mountPoint
     switch (paramType) {
     case OrbisSaveDataParamType::ALL: {
         const auto param = static_cast<const OrbisSaveDataParam*>(paramBuf);
-        ASSERT(paramBufSize == sizeof(OrbisSaveDataParam));
+        if (paramBufSize != sizeof(OrbisSaveDataParam)) {
+            LOG_WARNING(Lib_SaveData, "paramBufSize mismatch: {} != {}", paramBufSize, sizeof(OrbisSaveDataParam));
+            return Error::PARAMETER;
+        }
         param->ToSFO(*param_sfo);
         return Error::OK;
     } break;

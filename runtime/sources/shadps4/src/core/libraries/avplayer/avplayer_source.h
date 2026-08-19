@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "common/assert.h"
+#include "common/logging.h"
 #include "core/libraries/avplayer/avplayer.h"
 #include "core/libraries/avplayer/avplayer_common.h"
 #include "core/libraries/avplayer/avplayer_data_streamer.h"
@@ -48,7 +49,10 @@ public:
           m_data(is_texture ? AllocateTexture(memory_replacement, align, size)
                             : Allocate(memory_replacement, align, size)),
           m_is_texture(is_texture) {
-        ASSERT_MSG(m_data, "Could not allocate frame buffer.");
+        if (!m_data) {
+            LOG_ERROR(Lib_AvPlayer, "Could not allocate frame buffer.");
+            return;
+        }
     }
 
     ~GuestBuffer() {
@@ -188,8 +192,8 @@ private:
     AVFramePtr ConvertAudioFrame(const AVFrame& frame);
     AVFramePtr ConvertVideoFrame(const AVFrame& frame);
 
-    Frame PrepareAudioFrame(GuestBuffer buffer, const AVFrame& frame);
-    Frame PrepareVideoFrame(GuestBuffer buffer, const AVFrame& frame);
+    std::optional<Frame> PrepareAudioFrame(GuestBuffer buffer, const AVFrame& frame);
+    std::optional<Frame> PrepareVideoFrame(GuestBuffer buffer, const AVFrame& frame);
 
     AvPlayerStateCallback& m_state;
     bool m_use_vdec2 = false;

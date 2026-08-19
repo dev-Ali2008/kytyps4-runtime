@@ -129,8 +129,9 @@ bool EqueueInternal::ScheduleEvent(u64 id, s16 filter,
     }
 
     const auto& event = *it;
-    ASSERT(event.event.filter == OrbisKernelEvent::Filter::Timer ||
-           event.event.filter == OrbisKernelEvent::Filter::HrTimer);
+    bool isTimer = event.event.filter == OrbisKernelEvent::Filter::Timer ||
+                   event.event.filter == OrbisKernelEvent::Filter::HrTimer;
+    if (!isTimer) { LOG_WARNING(Kernel_Event, "ScheduleEvent called with non-timer filter"); return false; }
 
     if (!it->timer) {
         it->timer = std::make_unique<boost::asio::steady_timer>(io_context, event.timer_interval);
@@ -274,7 +275,7 @@ bool EqueueInternal::AddSmallTimer(EqueueEvent& ev) {
 }
 
 int EqueueInternal::WaitForSmallTimer(OrbisKernelEvent* ev, int num, u32 micros) {
-    ASSERT(num >= 1);
+    if (num < 1) { LOG_WARNING(Kernel_Event, "WaitForSmallTimer called with num < 1"); return 0; }
 
     auto curr_clock = std::chrono::steady_clock::now();
     const auto wait_end_us = (micros == 0) ? std::chrono::steady_clock::time_point::max()
@@ -604,7 +605,7 @@ int PS4_SYSV_ABI sceKernelAddUserEventEdge(OrbisKernelEqueue eq, int id) {
 }
 
 void* PS4_SYSV_ABI sceKernelGetEventUserData(const OrbisKernelEvent* ev) {
-    ASSERT(ev);
+    if (!ev) { LOG_WARNING(Kernel_Event, "sceKernelGetEventUserData called with null event"); return nullptr; }
     return ev->udata;
 }
 

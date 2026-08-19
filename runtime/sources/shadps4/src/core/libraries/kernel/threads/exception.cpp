@@ -120,7 +120,8 @@ s32 NativeToOrbisSignal(s32 s) {
         if (s > 0 && s < 128) {
             return s;
         }
-        UNREACHABLE_MSG("Unknown signal {}", s);
+        LOG_WARNING(Lib_Kernel, "Unknown OrbisToNative signal {}", s);
+        return s > 0 ? s : 1;
     }
 }
 
@@ -194,7 +195,8 @@ s32 OrbisToNativeSignal(s32 s) {
         if (s > 0 && s < 128) {
             return s;
         }
-        UNREACHABLE_MSG("Unknown signal {}", s);
+        LOG_WARNING(Lib_Kernel, "Unknown NativeToOrbis signal {}", s);
+        return s > 0 ? s : 1;
     }
 }
 
@@ -300,7 +302,7 @@ void SigactionHandler(int native_signum, siginfo_t* inf, ucontext_t* raw_context
         handler(NativeToOrbisSignal(native_signum), &ctx);
 #endif
     } else {
-        UNREACHABLE_MSG("Unhandled exception");
+        LOG_WARNING(Lib_Kernel, "Unhandled exception signal {}", native_signum);
     }
 }
 #else
@@ -608,7 +610,7 @@ s32 PS4_SYSV_ABI sceKernelDebugRaiseException(u32 error, s64 unk) {
     if (unk != 0) {
         return ORBIS_KERNEL_ERROR_EINVAL;
     }
-    UNREACHABLE_MSG("error {:#x}", error);
+    LOG_ERROR(Lib_Kernel, "sceKernelDebugRaiseException error={:#x}", error);
     return ORBIS_OK;
 }
 
@@ -616,7 +618,7 @@ s32 PS4_SYSV_ABI sceKernelDebugRaiseExceptionOnReleaseMode(u32 error, s64 unk) {
     if (unk != 0) {
         return ORBIS_KERNEL_ERROR_EINVAL;
     }
-    UNREACHABLE_MSG("error {:#x}", error);
+    LOG_ERROR(Lib_Kernel, "sceKernelDebugRaiseExceptionOnReleaseMode error={:#x}", error);
     return ORBIS_OK;
 }
 

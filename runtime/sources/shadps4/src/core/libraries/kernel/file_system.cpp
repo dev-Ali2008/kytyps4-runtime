@@ -810,7 +810,7 @@ s32 PS4_SYSV_ABI fstat(s32 fd, OrbisKernelStat* sb) {
         break;
     }
     default:
-        UNREACHABLE_MSG("{}", u32(file->type.load()));
+        LOG_WARNING(Kernel_Fs, "Unknown file type {}", u32(file->type.load()));
     }
     return ORBIS_OK;
 }

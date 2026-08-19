@@ -223,7 +223,8 @@ int PS4_SYSV_ABI sys_socketex(const char* name, int family, int type, int protoc
         socket = std::make_shared<P2PSocket>(family, type, protocol);
         break;
     default:
-        UNREACHABLE_MSG("Unknown type {}", type);
+        LOG_WARNING(Lib_Net, "Unknown socket type {}", type);
+        return -1;
     }
     if (!socket->IsValid()) {
         *Libraries::Kernel::__Error() = ORBIS_NET_EPROTONOSUPPORT;

@@ -358,9 +358,13 @@ void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_
         frame = presenter->PrepareBlankFrame(false);
     } else {
         const auto& buffer = port->buffer_slots[index];
-        ASSERT_MSG(buffer.group_index >= 0, "Trying to flip an unregistered buffer!");
-        const auto& group = port->groups[buffer.group_index];
-        frame = presenter->PrepareFrame(group, buffer.address_left);
+        if (buffer.group_index < 0) {
+            LOG_WARNING(Lib_VideoOut, "Trying to flip an unregistered buffer index={}", index);
+            frame = presenter->PrepareBlankFrame(false);
+        } else {
+            const auto& group = port->groups[buffer.group_index];
+            frame = presenter->PrepareFrame(group, buffer.address_left);
+        }
     }
 
     if (queue_traces.fetch_add(1, std::memory_order_relaxed) < 32) {

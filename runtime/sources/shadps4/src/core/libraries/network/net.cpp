@@ -43,7 +43,8 @@ static int ConvertFamilies(int family) {
     case ORBIS_NET_AF_INET6:
         return AF_INET6;
     default:
-        UNREACHABLE_MSG("unsupported socket family {}", family);
+        LOG_WARNING(Lib_Net, "Unsupported socket family {}", family);
+        return AF_INET;
     }
 }
 
@@ -666,7 +667,8 @@ int PS4_SYSV_ABI sceNetEpollControl(OrbisNetId epollid, OrbisNetEpollFlag op, Or
 #ifndef __FreeBSD__
             epoll_event native_event = {.events = ConvertEpollEventsIn(event->events),
                                         .data = {.fd = id}};
-            ASSERT(epoll_ctl(epoll->epoll_fd, EPOLL_CTL_ADD, *native_handle, &native_event) == 0);
+            auto result = epoll_ctl(epoll->epoll_fd, EPOLL_CTL_ADD, *native_handle, &native_event);
+            if (result != 0) { LOG_WARNING(Lib_Net, "epoll_ctl ADD failed"); }
             epoll->events.emplace_back(id, *event);
 #endif
             break;
@@ -716,7 +718,8 @@ int PS4_SYSV_ABI sceNetEpollControl(OrbisNetId epollid, OrbisNetEpollFlag op, Or
 #ifndef __FreeBSD__
             epoll_event native_event = {.events = ConvertEpollEventsIn(event->events),
                                         .data = {.fd = id}};
-            ASSERT(epoll_ctl(epoll->epoll_fd, EPOLL_CTL_MOD, *native_handle, &native_event) == 0);
+            auto result = epoll_ctl(epoll->epoll_fd, EPOLL_CTL_MOD, *native_handle, &native_event);
+            if (result != 0) { LOG_WARNING(Lib_Net, "epoll_ctl MOD failed"); }
             *it = {id, *event};
 #endif
             break;
@@ -757,7 +760,8 @@ int PS4_SYSV_ABI sceNetEpollControl(OrbisNetId epollid, OrbisNetEpollFlag op, Or
                 return ORBIS_NET_ERROR_EBADF;
             }
 #ifndef __FreeBSD__
-            ASSERT(epoll_ctl(epoll->epoll_fd, EPOLL_CTL_DEL, *native_handle, nullptr) == 0);
+            auto result = epoll_ctl(epoll->epoll_fd, EPOLL_CTL_DEL, *native_handle, nullptr);
+            if (result != 0) { LOG_WARNING(Lib_Net, "epoll_ctl DEL failed"); }
             epoll->events.erase(it);
 #endif
             break;
@@ -869,7 +873,7 @@ int PS4_SYSV_ABI sceNetEpollWait(OrbisNetId epollid, OrbisNetEpollEvent* events,
                       current_event.events, current_event.data.u64);
             const auto it = std::ranges::find_if(
                 epoll->events, [&](auto& el) { return el.first == current_event.data.fd; });
-            ASSERT(it != epoll->events.end());
+            if (it == epoll->events.end()) { LOG_WARNING(Lib_Net, "epoll event not found for fd {}", current_event.data.fd); continue; }
             events[i] = {
                 .events = ConvertEpollEventsOut(current_event.events),
                 .ident = static_cast<u64>(current_event.data.fd),
@@ -901,7 +905,7 @@ int PS4_SYSV_ABI sceNetEpollWait(OrbisNetId epollid, OrbisNetEpollEvent* events,
 
             const auto it =
                 std::ranges::find_if(epoll->events, [&](auto& el) { return el.first == rid; });
-            ASSERT(it != epoll->events.end());
+            if (it == epoll->events.end()) { LOG_WARNING(Lib_Net, "epoll event not found for resolver {}", rid); continue; }
             events[i] = {
                 .events = ORBIS_NET_EPOLLDESCID,
                 .ident = static_cast<u64>(rid),
@@ -1245,7 +1249,8 @@ int PS4_SYSV_ABI sceNetInetPton(int af, const char* src, void* dst) {
     int res = inet_pton(ConvertFamilies(af), src, dst);
 #endif
     if (res < 0) {
-        UNREACHABLE_MSG("af = {}, src = {}, dst = {}", af, src, fmt::ptr(dst));
+        LOG_WARNING(Lib_Net, "Unsupported af = {}, src = {}, dst = {}", af, src, fmt::ptr(dst));
+        return -1;
     }
     return res;
 }

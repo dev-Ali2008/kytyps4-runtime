@@ -6,6 +6,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include "common/logging/log.h"
 #include "core/libraries/libc_internal/libc_internal_cxa.h"
@@ -17,6 +18,14 @@ namespace {
 std::mutex GuardMutex;
 std::condition_variable GuardCondition;
 std::unordered_map<u64*, std::thread::id> GuardOwners;
+
+struct AtexitEntry {
+    void (*handler)(void*);
+    void* arg;
+    void* dso_handle;
+};
+std::vector<AtexitEntry> atexit_handlers;
+std::mutex atexit_mutex;
 
 u8* GuardBytes(u64* guard_object) {
     return reinterpret_cast<u8*>(guard_object);
@@ -77,10 +86,40 @@ void PS4_SYSV_ABI fex_libc_cxa_guard_abort(u64* guard_object) {
     GuardCondition.notify_all();
 }
 
+int PS4_SYSV_ABI fex_libc_cxa_atexit(void (*handler)(void*), void* arg, void* dso_handle) {
+    if (!handler) {
+        return -1;
+    }
+    std::lock_guard lock{atexit_mutex};
+    atexit_handlers.push_back({handler, arg, dso_handle});
+    LOG_DEBUG(Lib_LibcInternal, "registered atexit handler at {} arg={} dso={}",
+              static_cast<void*>(reinterpret_cast<void(*)()>(handler)),
+              static_cast<void*>(arg), static_cast<void*>(dso_handle));
+    return 0;
+}
+
+int PS4_SYSV_ABI fex_libc_cxa_finalize(void* dso_handle) {
+    std::lock_guard lock{atexit_mutex};
+    auto it = atexit_handlers.begin();
+    while (it != atexit_handlers.end()) {
+        if (!dso_handle || it->dso_handle == dso_handle) {
+            LOG_DEBUG(Lib_LibcInternal, "calling atexit handler arg={}",
+                      static_cast<void*>(it->arg));
+            it->handler(it->arg);
+            it = atexit_handlers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return 0;
+}
+
 void RegisterFexLibcCxaAliases(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("3GPpjQdAMTw", "libc", 1, "libc", fex_libc_cxa_guard_acquire);
     LIB_FUNCTION("9rAeANT2tyE", "libc", 1, "libc", fex_libc_cxa_guard_release);
     LIB_FUNCTION("2emaaluWzUw", "libc", 1, "libc", fex_libc_cxa_guard_abort);
+    LIB_FUNCTION("RCBypXp5h1U", "libc", 1, "libc", fex_libc_cxa_atexit);
+    LIB_FUNCTION("p+pV1dCxu10", "libc", 1, "libc", fex_libc_cxa_finalize);
 }
 
 } // namespace Libraries::LibcInternal

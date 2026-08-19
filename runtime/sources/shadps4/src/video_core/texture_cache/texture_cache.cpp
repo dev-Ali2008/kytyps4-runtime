@@ -30,67 +30,15 @@ namespace VideoCore {
 
 static constexpr u64 PageShift = 12;
 static constexpr u64 NumFramesBeforeRemoval = 32;
-static constexpr std::size_t MaxViewDimensionMismatchRecords = 64;
 
 static void LogViewDimensionMismatch(const TextureCache::ImageDesc& desc, const Image& image) {
     if (IsViewTypeCompatible(desc.view_info.type, image.info.type)) {
         return;
     }
 
-    const auto& requested = desc.info;
-    const auto& backing = image.info;
-    const auto requested_micro = AmdGpu::GetMicroTileMode(requested.tile_mode);
-    const auto backing_micro = AmdGpu::GetMicroTileMode(backing.tile_mode);
-    const u32 active_backing_samples = image.backing ? image.backing->num_samples : 0;
-    const std::string actual_vk_type =
-        image.backing ? vk::to_string(image.backing->image.image_ci.imageType) : "None";
-    const std::string actual_vk_format =
-        image.backing ? vk::to_string(image.backing->image.image_ci.format) : "None";
-    const std::string actual_vk_samples =
-        image.backing ? vk::to_string(image.backing->image.image_ci.samples) : "None";
-    const std::string record = fmt::format(
-        "VIEW_DIMENSION_MISMATCH binding={} view={} requested_type={} backing_type={} "
-        "request_addr={:#x} request_size={:#x} backing_addr={:#x} backing_size={:#x} "
-        "request_extent={}x{}x{} request_pitch={} request_bpp={} request_samples={} "
-        "request_levels={} request_layers={} request_tile={} request_array={} "
-        "request_micro={} request_thickness={} request_format={} "
-        "backing_extent={}x{}x{} backing_pitch={} backing_bpp={} backing_samples={} "
-        "active_backing_samples={} actual_vk_type={} actual_vk_format={} actual_vk_samples={} "
-        "backing_levels={} backing_layers={} backing_tile={} "
-        "backing_array={} backing_micro={} backing_thickness={} backing_format={} "
-        "view_format={} mip_base={} mip_count={} layer_base={} layer_count={} storage={} "
-        "history_texture={} history_storage={} history_rt={} history_depth={} history_vo={} "
-        "bound={} target={} usage_flags={}",
-        magic_enum::enum_name(desc.type), magic_enum::enum_name(desc.view_info.type),
-        magic_enum::enum_name(requested.type), magic_enum::enum_name(backing.type),
-        requested.guest_address, requested.guest_size, backing.guest_address, backing.guest_size,
-        requested.size.width, requested.size.height, requested.size.depth, requested.pitch,
-        requested.num_bits, requested.num_samples, requested.resources.levels,
-        requested.resources.layers, magic_enum::enum_name(requested.tile_mode),
-        magic_enum::enum_name(requested.array_mode), magic_enum::enum_name(requested_micro),
-        AmdGpu::GetMicroTileThickness(requested.array_mode),
-        vk::to_string(requested.pixel_format), backing.size.width, backing.size.height,
-        backing.size.depth, backing.pitch, backing.num_bits, backing.num_samples,
-        active_backing_samples, actual_vk_type, actual_vk_format, actual_vk_samples,
-        backing.resources.levels, backing.resources.layers,
-        magic_enum::enum_name(backing.tile_mode), magic_enum::enum_name(backing.array_mode),
-        magic_enum::enum_name(backing_micro), AmdGpu::GetMicroTileThickness(backing.array_mode),
-        vk::to_string(backing.pixel_format), vk::to_string(desc.view_info.format),
-        desc.view_info.range.base.level, desc.view_info.range.extent.levels,
-        desc.view_info.range.base.layer, desc.view_info.range.extent.layers,
-        desc.view_info.is_storage, image.usage.texture, image.usage.storage,
-        image.usage.render_target, image.usage.depth_target, image.usage.vo_surface,
-        image.binding.is_bound, image.binding.is_target, vk::to_string(image.usage_flags));
-
-    static std::mutex records_mutex;
-    static std::unordered_set<std::string> records;
-    {
-        std::scoped_lock lock{records_mutex};
-        if (records.size() >= MaxViewDimensionMismatchRecords || !records.emplace(record).second) {
-            return;
-        }
-    }
-    LOG_ERROR(Render_Vulkan, "{}", record);
+    LOG_WARNING(Render_TextureCache, "View dimension mismatch: addr={:#x} size={:#x} requested_type={} cached_type={}",
+                desc.info.guest_address, desc.info.guest_size,
+                static_cast<u32>(desc.info.type), static_cast<u32>(image.info.type));
 }
 
 TextureCache::TextureCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
@@ -860,7 +808,6 @@ void TextureCache::RefreshImage(Image& image) {
     }
 
     RENDERER_TRACE;
-    TRACE_HINT(fmt::format("{:x}:{:x}", image.info.guest_address, image.info.guest_size));
 
     if (True(image.flags & ImageFlagBits::MaybeCpuDirty) &&
         False(image.flags & ImageFlagBits::CpuDirty)) {

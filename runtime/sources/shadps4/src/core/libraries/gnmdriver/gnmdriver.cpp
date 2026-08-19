@@ -146,7 +146,10 @@ s32 PS4_SYSV_ABI sceGnmAddEqEvent(OrbisKernelEqueue eq, u64 id, void* udata) {
     Platform::IrqC::Instance()->Register(
         static_cast<Platform::InterruptId>(id),
         [=](Platform::InterruptId irq) {
-            ASSERT_MSG(irq == static_cast<Platform::InterruptId>(id), "An unexpected IRQ occured");
+            if (irq != static_cast<Platform::InterruptId>(id)) {
+                LOG_WARNING(Lib_GnmDriver, "Unexpected IRQ received (expected {})", id);
+                return;
+            }
 
             // We need to convert IRQ# to event id
             if (!IsValidEventType(irq))
@@ -162,7 +165,6 @@ s32 PS4_SYSV_ABI sceGnmAddEqEvent(OrbisKernelEqueue eq, u64 id, void* udata) {
 }
 
 int PS4_SYSV_ABI sceGnmAreSubmitsAllowed() {
-    LOG_TRACE(Lib_GnmDriver, "called");
     return submission_lock == 0;
 }
 
@@ -292,9 +294,6 @@ int PS4_SYSV_ABI sceGnmDestroyWorkloadStream() {
 }
 
 void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
-    HLE_TRACE;
-    LOG_DEBUG(Lib_GnmDriver, "vqid {}, offset_dw {}", gnm_vqid, next_offs_dw);
-
     if (gnm_vqid == 0) {
         return;
     }
@@ -364,7 +363,6 @@ void PS4_SYSV_ABI sceGnmDingDong(u32 gnm_vqid, u32 next_offs_dw) {
 }
 
 void PS4_SYSV_ABI sceGnmDingDongForWorkload(u32 gnm_vqid, u32 next_offs_dw, u64 workload_id) {
-    LOG_DEBUG(Lib_GnmDriver, "called, redirecting to sceGnmDingDong");
     sceGnmDingDong(gnm_vqid, next_offs_dw);
 }
 
@@ -374,9 +372,7 @@ int PS4_SYSV_ABI sceGnmDisableMipStatsReport() {
 }
 
 s32 PS4_SYSV_ABI sceGnmDispatchDirect(u32* cmdbuf, u32 size, u32 threads_x, u32 threads_y,
-                                      u32 threads_z, u32 flags) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
+                                       u32 threads_z, u32 flags) {
     if (cmdbuf && (size == 9) && ((s32)(threads_x | threads_y | threads_z) > -1)) {
         const auto predicate = flags & 1 ? PM4Predicate::PredEnable : PM4Predicate::PredDisable;
         cmdbuf = WriteHeader<PM4ItOpcode::DispatchDirect>(cmdbuf, 4, PM4ShaderType::ShaderCompute,
@@ -391,8 +387,6 @@ s32 PS4_SYSV_ABI sceGnmDispatchDirect(u32* cmdbuf, u32 size, u32 threads_x, u32 
 }
 
 s32 PS4_SYSV_ABI sceGnmDispatchIndirect(u32* cmdbuf, u32 size, u32 data_offset, u32 flags) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
     if (cmdbuf && (size == 7)) {
         const auto predicate = flags & 1 ? PM4Predicate::PredEnable : PM4Predicate::PredDisable;
         cmdbuf = WriteHeader<PM4ItOpcode::DispatchIndirect>(cmdbuf, 2, PM4ShaderType::ShaderCompute,
@@ -453,9 +447,7 @@ u32 PS4_SYSV_ABI sceGnmDispatchInitDefaultHardwareState(u32* cmdbuf, u32 size) {
 }
 
 s32 PS4_SYSV_ABI sceGnmDrawIndex(u32* cmdbuf, u32 size, u32 index_count, uintptr_t index_addr,
-                                 u32 flags, u32 type) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
+                                  u32 flags, u32 type) {
     if (cmdbuf && (size == 10) && (index_addr != 0) && (index_addr & 1) == 0 &&
         (flags & 0x1ffffffe) == 0) { // no predication will be set in the packet
         auto* draw_index = reinterpret_cast<PM4CmdDrawIndex2*>(cmdbuf);
@@ -474,8 +466,6 @@ s32 PS4_SYSV_ABI sceGnmDrawIndex(u32* cmdbuf, u32 size, u32 index_count, uintptr
 }
 
 s32 PS4_SYSV_ABI sceGnmDrawIndexAuto(u32* cmdbuf, u32 size, u32 index_count, u32 flags) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
     if (cmdbuf && (size == 7) &&
         (flags & 0x1ffffffe) == 0) { // no predication will be set in the packet
         cmdbuf = WritePacket<PM4ItOpcode::DrawIndexAuto>(
@@ -488,10 +478,8 @@ s32 PS4_SYSV_ABI sceGnmDrawIndexAuto(u32* cmdbuf, u32 size, u32 index_count, u32
 }
 
 s32 PS4_SYSV_ABI sceGnmDrawIndexIndirect(u32* cmdbuf, u32 size, u32 data_offset, u32 shader_stage,
-                                         u32 vertex_sgpr_offset, u32 instance_sgpr_offset,
-                                         u32 flags) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
+                                          u32 vertex_sgpr_offset, u32 instance_sgpr_offset,
+                                          u32 flags) {
     if (cmdbuf && (size == 9) && (shader_stage < ShaderStages::Max) &&
         (vertex_sgpr_offset < 0x10u) && (instance_sgpr_offset < 0x10u)) {
 
@@ -514,11 +502,9 @@ s32 PS4_SYSV_ABI sceGnmDrawIndexIndirect(u32* cmdbuf, u32 size, u32 data_offset,
 }
 
 s32 PS4_SYSV_ABI sceGnmDrawIndexIndirectCountMulti(u32* cmdbuf, u32 size, u32 data_offset,
-                                                   u32 max_count, u64 count_addr, u32 shader_stage,
-                                                   u32 vertex_sgpr_offset, u32 instance_sgpr_offset,
-                                                   u32 flags) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
+                                                    u32 max_count, u64 count_addr, u32 shader_stage,
+                                                    u32 vertex_sgpr_offset, u32 instance_sgpr_offset,
+                                                    u32 flags) {
     if ((!sceKernelIsNeoMode() || !UseNeoCompatSequences) && cmdbuf && (size == 16) &&
         (vertex_sgpr_offset < 0x10u) && (instance_sgpr_offset < 0x10u) &&
         (shader_stage == ShaderStages::Vs || shader_stage == ShaderStages::Es ||
@@ -551,10 +537,8 @@ s32 PS4_SYSV_ABI sceGnmDrawIndexIndirectCountMulti(u32* cmdbuf, u32 size, u32 da
 }
 
 int PS4_SYSV_ABI sceGnmDrawIndexIndirectMulti(u32* cmdbuf, u32 size, u32 data_offset, u32 max_count,
-                                              u32 shader_stage, u32 vertex_sgpr_offset,
-                                              u32 instance_sgpr_offset, u32 flags) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
+                                               u32 shader_stage, u32 vertex_sgpr_offset,
+                                               u32 instance_sgpr_offset, u32 flags) {
     if (cmdbuf && (size == 11) && (vertex_sgpr_offset < 0x10u) && (instance_sgpr_offset < 0x10u) &&
         (shader_stage == ShaderStages::Vs || shader_stage == ShaderStages::Es ||
          shader_stage == ShaderStages::Ls)) {
@@ -581,14 +565,11 @@ int PS4_SYSV_ABI sceGnmDrawIndexIndirectMulti(u32* cmdbuf, u32 size, u32 data_of
 
 int PS4_SYSV_ABI sceGnmDrawIndexMultiInstanced() {
     LOG_ERROR(Lib_GnmDriver, "(STUBBED) called");
-    UNREACHABLE();
-    return ORBIS_OK;
+    return -1;
 }
 
 s32 PS4_SYSV_ABI sceGnmDrawIndexOffset(u32* cmdbuf, u32 size, u32 index_offset, u32 index_count,
-                                       u32 flags) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
+                                        u32 flags) {
     if (cmdbuf && (size == 9)) {
         const auto predicate = flags & 1 ? PM4Predicate::PredEnable : PM4Predicate::PredDisable;
         cmdbuf = WriteHeader<PM4ItOpcode::DrawIndexOffset2>(
@@ -603,9 +584,7 @@ s32 PS4_SYSV_ABI sceGnmDrawIndexOffset(u32* cmdbuf, u32 size, u32 index_offset, 
 }
 
 s32 PS4_SYSV_ABI sceGnmDrawIndirect(u32* cmdbuf, u32 size, u32 data_offset, u32 shader_stage,
-                                    u32 vertex_sgpr_offset, u32 instance_sgpr_offset, u32 flags) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
+                                     u32 vertex_sgpr_offset, u32 instance_sgpr_offset, u32 flags) {
     if (cmdbuf && (size == 9) && (shader_stage < ShaderStages::Max) &&
         (vertex_sgpr_offset < 0x10u) && (instance_sgpr_offset < 0x10u)) {
 
@@ -629,15 +608,12 @@ s32 PS4_SYSV_ABI sceGnmDrawIndirect(u32* cmdbuf, u32 size, u32 data_offset, u32 
 
 int PS4_SYSV_ABI sceGnmDrawIndirectCountMulti() {
     LOG_ERROR(Lib_GnmDriver, "(STUBBED) called");
-    UNREACHABLE();
-    return ORBIS_OK;
+    return -1;
 }
 
 s32 PS4_SYSV_ABI sceGnmDrawIndirectMulti(u32* cmdbuf, u32 size, u32 data_offset, u32 max_count,
-                                         u32 shader_stage, u32 vertex_sgpr_offset,
-                                         u32 instance_sgpr_offset, u32 flags) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
+                                          u32 shader_stage, u32 vertex_sgpr_offset,
+                                          u32 instance_sgpr_offset, u32 flags) {
     if (cmdbuf && size == 11 && shader_stage < ShaderStages::Max && vertex_sgpr_offset < 0x10 &&
         instance_sgpr_offset < 0x10) {
         const auto predicate = flags & 1 ? PM4Predicate::PredEnable : PM4Predicate::PredDisable;
@@ -660,8 +636,6 @@ s32 PS4_SYSV_ABI sceGnmDrawIndirectMulti(u32* cmdbuf, u32 size, u32 data_offset,
 }
 
 u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState(u32* cmdbuf, u32 size) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
     if (size < HwInitPacketSize) {
         return 0;
     }
@@ -1150,15 +1124,16 @@ int PS4_SYSV_ABI sceGnmInsertThreadTraceMarker() {
 }
 
 s32 PS4_SYSV_ABI sceGnmInsertWaitFlipDone(u32* cmdbuf, u32 size, s32 vo_handle, u32 buf_idx) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
     if (size != 7) {
         return -1;
     }
 
     uintptr_t label_addr{};
-    ASSERT_MSG(VideoOut::sceVideoOutGetBufferLabelAddress(vo_handle, &label_addr) == 16,
-               "sceVideoOutGetBufferLabelAddress call failed");
+    const s32 label_result = VideoOut::sceVideoOutGetBufferLabelAddress(vo_handle, &label_addr);
+    if (label_result != 16) {
+        LOG_WARNING(Lib_GnmDriver, "sceVideoOutGetBufferLabelAddress failed with {}", label_result);
+        label_addr = 0;
+    }
 
     auto* wait_reg_mem = reinterpret_cast<PM4CmdWaitRegMem*>(cmdbuf);
     wait_reg_mem->header = PM4Type3Header{PM4ItOpcode::WaitRegMem, 5};
@@ -1688,8 +1663,6 @@ s32 PS4_SYSV_ABI sceGnmSetLsShader(u32* cmdbuf, u32 size, const u32* ls_regs, u3
 }
 
 s32 PS4_SYSV_ABI sceGnmSetPsShader(u32* cmdbuf, u32 size, const u32* ps_regs) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
     if (!cmdbuf || size <= 0x27) {
         return -1;
     }
@@ -1725,8 +1698,6 @@ s32 PS4_SYSV_ABI sceGnmSetPsShader(u32* cmdbuf, u32 size, const u32* ps_regs) {
 }
 
 s32 PS4_SYSV_ABI sceGnmSetPsShader350(u32* cmdbuf, u32 size, const u32* ps_regs) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
     if (!cmdbuf || size <= 0x27) {
         return -1;
     }
@@ -1792,9 +1763,7 @@ int PS4_SYSV_ABI sceGnmSetupMipStatsReport() {
 }
 
 s32 PS4_SYSV_ABI sceGnmSetVgtControl(u32* cmdbuf, u32 size, u32 prim_group_sz_minus_one,
-                                     u32 partial_vs_wave_mode, u32 wd_switch_only_on_eop_mode) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
+                                      u32 partial_vs_wave_mode, u32 wd_switch_only_on_eop_mode) {
     if (!cmdbuf || size != 3 || (prim_group_sz_minus_one >= 0x100) ||
         ((wd_switch_only_on_eop_mode | partial_vs_wave_mode) >= 2)) {
         return -1;
@@ -1823,8 +1792,6 @@ s32 PS4_SYSV_ABI sceGnmSetVgtControl(u32* cmdbuf, u32 size, u32 prim_group_sz_mi
 }
 
 s32 PS4_SYSV_ABI sceGnmSetVsShader(u32* cmdbuf, u32 size, const u32* vs_regs, u32 shader_modifier) {
-    LOG_TRACE(Lib_GnmDriver, "called");
-
     if (!cmdbuf || size <= 0x1c) {
         return -1;
     }
@@ -2093,14 +2060,21 @@ static inline s32 PatchFlipRequest(u32* cmdbuf, u32 size, u32 vo_handle, u32 buf
                                    s64 flip_arg, void* unk) {
     // check for `prepareFlip` packet
     cmdbuf += size - 64;
-    ASSERT_MSG(cmdbuf[0] == 0xc03e1000, "Can't find `prepareFlip` packet");
+    if (cmdbuf[0] != 0xc03e1000) {
+        LOG_WARNING(Lib_GnmDriver, "Can't find `prepareFlip` packet, cmdbuf[0]={:#x}", cmdbuf[0]);
+        return 0x80d11001;
+    }
 
     std::array<u32, 7> backup{};
     std::memcpy(backup.data(), cmdbuf, backup.size() * sizeof(decltype(backup)::value_type));
 
-    ASSERT_MSG(((backup[2] & 3) == 0u) || (backup[1] != PM4CmdNop::PayloadType::PrepareFlipLabel),
-               "Invalid flip packet");
-    ASSERT_MSG(buf_idx != 0xffff'ffffu, "Invalid VO buffer index");
+    if (((backup[2] & 3) != 0u) && (backup[1] == PM4CmdNop::PayloadType::PrepareFlipLabel)) {
+        LOG_WARNING(Lib_GnmDriver, "Invalid flip packet");
+    }
+    if (buf_idx == 0xffff'ffffu) {
+        LOG_WARNING(Lib_GnmDriver, "Invalid VO buffer index");
+        return 0x80d11002;
+    }
 
     const u32 flip_token = next_flip_token.fetch_add(1, std::memory_order_relaxed);
     const s32 flip_result = VideoOut::sceVideoOutSubmitEopFlip(
@@ -2116,8 +2090,11 @@ static inline s32 PatchFlipRequest(u32* cmdbuf, u32 size, u32 vo_handle, u32 buf
     }
 
     uintptr_t label_addr{};
-    ASSERT_MSG(VideoOut::sceVideoOutGetBufferLabelAddress(vo_handle, &label_addr) == 16,
-               "sceVideoOutGetBufferLabelAddress call failed");
+    const s32 label_res = VideoOut::sceVideoOutGetBufferLabelAddress(vo_handle, &label_addr);
+    if (label_res != 16) {
+        LOG_WARNING(Lib_GnmDriver, "sceVideoOutGetBufferLabelAddress failed with {}", label_res);
+        label_addr = 0;
+    }
 
     // Write event to lock the VO surface
     auto* write_lock = reinterpret_cast<PM4CmdWriteData*>(cmdbuf);
@@ -2188,8 +2165,6 @@ s32 PS4_SYSV_ABI sceGnmSubmitAndFlipCommandBuffers(u32 count, u32* dcb_gpu_addrs
 s32 PS4_SYSV_ABI sceGnmSubmitAndFlipCommandBuffersForWorkload(
     u32 workload, u32 count, u32* dcb_gpu_addrs[], u32* dcb_sizes_in_bytes, u32* ccb_gpu_addrs[],
     u32* ccb_sizes_in_bytes, u32 vo_handle, u32 buf_idx, u32 flip_mode, s64 flip_arg) {
-    LOG_DEBUG(Lib_GnmDriver, "called [buf = {}]", buf_idx);
-
     auto* cmdbuf = dcb_gpu_addrs[count - 1];
     const auto size_dw = dcb_sizes_in_bytes[count - 1] / 4;
 
@@ -2205,12 +2180,11 @@ s32 PS4_SYSV_ABI sceGnmSubmitAndFlipCommandBuffersForWorkload(
 }
 
 int PS4_SYSV_ABI sceGnmSubmitCommandBuffersForWorkload(u32 workload, u32 count,
-                                                       const u32* dcb_gpu_addrs[],
-                                                       u32* dcb_sizes_in_bytes,
-                                                       const u32* ccb_gpu_addrs[],
-                                                       u32* ccb_sizes_in_bytes) {
+                                                        const u32* dcb_gpu_addrs[],
+                                                        u32* dcb_sizes_in_bytes,
+                                                        const u32* ccb_gpu_addrs[],
+                                                        u32* ccb_sizes_in_bytes) {
     HLE_TRACE;
-    LOG_DEBUG(Lib_GnmDriver, "called");
 
     if (!dcb_gpu_addrs || !dcb_sizes_in_bytes) {
         LOG_ERROR(Lib_GnmDriver, "dcbGpuAddrs and dcbSizesInBytes must not be NULL");
@@ -2319,7 +2293,6 @@ s32 PS4_SYSV_ABI sceGnmSubmitCommandBuffers(u32 count, const u32* dcb_gpu_addrs[
 
 int PS4_SYSV_ABI sceGnmSubmitDone() {
     HLE_TRACE;
-    LOG_DEBUG(Lib_GnmDriver, "called");
     WaitGpuIdle();
     if (!liverpool->IsGpuIdle()) {
         submission_lock = true;

@@ -304,7 +304,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
                               instance.GetDriverID() == vk::DriverId::eMesaKosmickrisp,
         .needs_buffer_offsets = instance.StorageMinAlignment() > 4,
         .needs_unorm_fixup = instance.GetDriverID() == vk::DriverId::eMesaKosmickrisp,
-        .needs_clip_distance_emulation = instance.GetDriverID() == vk::DriverId::eNvidiaProprietary,
+        .needs_clip_distance_emulation = instance.GetDriverID() == vk::DriverId::eNvidiaProprietary ||
+                                          instance.GetDriverID() == vk::DriverId::eMesaTurnip ||
+                                          instance.GetDriverID() == vk::DriverId::eQualcommProprietary,
         .supports_shader_stencil_export = instance_.IsShaderStencilExportSupported(),
     };
     WarmUp();

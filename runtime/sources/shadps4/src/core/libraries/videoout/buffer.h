@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "common/assert.h"
+#include "common/logging/log.h"
 #include "common/types.h"
 
 namespace Libraries::VideoOut {
@@ -43,8 +44,8 @@ constexpr std::string_view GetPixelFormatString(PixelFormat format) {
     case PixelFormat::A16R16G16B16Float:
         return "A16R16G16B16Float";
     default:
-        UNREACHABLE_MSG("Unknown pixel format {}", static_cast<u32>(format));
-        return "";
+        LOG_WARNING(Lib_VideoOut, "Unknown pixel format {}", static_cast<u32>(format));
+        return "Unknown";
     }
 }
 

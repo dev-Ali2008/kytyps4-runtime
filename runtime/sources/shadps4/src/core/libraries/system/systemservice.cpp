@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <cstdlib>
+#include <cstring>
 #include "common/elf_info.h"
 #include "common/singleton.h"
 #include "core/emulator_settings.h"
@@ -1704,18 +1705,21 @@ int PS4_SYSV_ABI sceSystemServiceGetAppFocusedAppStatus() {
 }
 
 int PS4_SYSV_ABI sceSystemServiceGetAppIdOfBigApp() {
-    LOG_ERROR(Lib_SystemService, "(STUBBED) called");
-    return ORBIS_OK;
+    LOG_DEBUG(Lib_SystemService, "called");
+    // Return a valid big app ID. Games like Infamous check this to confirm
+    // they're the foreground process. ID 1 is the standard main app ID.
+    return 1;
 }
 
 int PS4_SYSV_ABI sceSystemServiceGetAppIdOfMiniApp() {
-    LOG_ERROR(Lib_SystemService, "(STUBBED) called");
-    return ORBIS_OK;
+    LOG_DEBUG(Lib_SystemService, "called");
+    return 0;
 }
 
 int PS4_SYSV_ABI sceSystemServiceGetAppStatus() {
-    LOG_ERROR(Lib_SystemService, "(STUBBED) called");
-    return ORBIS_OK;
+    LOG_DEBUG(Lib_SystemService, "called");
+    // Status 1 = running as foreground app
+    return 1;
 }
 
 int PS4_SYSV_ABI sceSystemServiceGetAppType() {
@@ -1957,6 +1961,21 @@ s32 PS4_SYSV_ABI sceSystemServiceParamGetInt(OrbisSystemServiceParamId param_id,
     case OrbisSystemServiceParamId::EnterButtonAssign:
         *value = u32(EmulatorSettings.IsCircleEnter() ? OrbisSystemParamEnterButtonAssign::Circle
                                                       : OrbisSystemParamEnterButtonAssign::Cross);
+        break;
+    case OrbisSystemServiceParamId::PreventPowerSave:
+    case OrbisSystemServiceParamId::ExperimentalMode:
+    case OrbisSystemServiceParamId::ExclusiveFullScreen:
+    case OrbisSystemServiceParamId::EnableForcePro:
+    case OrbisSystemServiceParamId::ProVideoOutPixelFormat:
+    case OrbisSystemServiceParamId::ProVideoOutInitialWidth:
+    case OrbisSystemServiceParamId::ProVideoOutReprojectionRate:
+    case OrbisSystemServiceParamId::ScreenPadBrightness:
+    case OrbisSystemServiceParamId::EnterButtonAssignIsRemappable:
+    case OrbisSystemServiceParamId::UserSwIfUpToDate:
+        *value = 0;
+        break;
+    case OrbisSystemServiceParamId::SystemName:
+        *value = 0;
         break;
     default:
         LOG_ERROR(Lib_SystemService, "param_id {} unsupported!", u32(param_id));
@@ -2458,6 +2477,52 @@ int PS4_SYSV_ABI Func_6B1CDB955F0EBD65() {
 }
 
 int PS4_SYSV_ABI Func_CB5E885E225F69F0() {
+    LOG_ERROR(Lib_SystemService, "(STUBBED) called");
+    return ORBIS_OK;
+}
+
+int PS4_SYSV_ABI sceSystemServiceGetHWCapability(void* ptr) {
+    LOG_WARNING(Lib_SystemService, "(STUBBED) called");
+    if (ptr != nullptr) {
+        std::memset(ptr, 0, 64);
+    }
+    return ORBIS_OK;
+}
+
+int PS4_SYSV_ABI sceSystemServiceInitFadeDimension() {
+    LOG_WARNING(Lib_SystemService, "(STUBBED) called");
+    return ORBIS_OK;
+}
+
+int PS4_SYSV_ABI sceSystemServiceGetParamSsoClientId() {
+    LOG_ERROR(Lib_SystemService, "(STUBBED) called");
+    return ORBIS_OK;
+}
+
+int PS4_SYSV_ABI sceSystemServiceGetParamSsoNpEnvironment() {
+    LOG_ERROR(Lib_SystemService, "(STUBBED) called");
+    return ORBIS_OK;
+}
+
+int PS4_SYSV_ABI sceSystemServiceParamSetInt() {
+    LOG_ERROR(Lib_SystemService, "(STUBBED) called");
+    return ORBIS_OK;
+}
+
+int PS4_SYSV_ABI sceSystemServiceParamSetString() {
+    LOG_ERROR(Lib_SystemService, "(STUBBED) called");
+    return ORBIS_OK;
+}
+
+int PS4_SYSV_ABI sceSystemServiceGetErrorDialogResult(int* result) {
+    LOG_ERROR(Lib_SystemService, "(STUBBED) called");
+    if (result) {
+        *result = 0;
+    }
+    return ORBIS_OK;
+}
+
+int PS4_SYSV_ABI sceSystemServiceGetSubDisplayMode() {
     LOG_ERROR(Lib_SystemService, "(STUBBED) called");
     return ORBIS_OK;
 }
@@ -3400,6 +3465,23 @@ void RegisterLib(Core::Loader::SymbolsResolver* sym) {
                  "libSceSystemService", Func_6B1CDB955F0EBD65);
     LIB_FUNCTION("y16IXiJfafA", "libSceSystemServiceYouTubeAccountLinkStatus", 1,
                  "libSceSystemService", Func_CB5E885E225F69F0);
+    // God of War (CUSA00491) and other AAA titles use these
+    LIB_FUNCTION("rb+ZNiKPLxw", "libSceSystemService", 1, "libSceSystemService",
+                 sceSystemServiceGetHWCapability);
+    LIB_FUNCTION("TBV-9LkNi+o", "libSceSystemService", 1, "libSceSystemService",
+                 sceSystemServiceInitFadeDimension);
+    LIB_FUNCTION("s9MFi-2ATDs", "libSceSystemService", 1, "libSceSystemService",
+                 sceSystemServiceGetParamSsoClientId);
+    LIB_FUNCTION("GJRmH9b+W0c", "libSceSystemService", 1, "libSceSystemService",
+                 sceSystemServiceGetParamSsoNpEnvironment);
+    LIB_FUNCTION("7VuQJbEHXZQ", "libSceSystemService", 1, "libSceSystemService",
+                 sceSystemServiceParamSetInt);
+    LIB_FUNCTION("5F7zFJdLAxc", "libSceSystemService", 1, "libSceSystemService",
+                 sceSystemServiceParamSetString);
+    LIB_FUNCTION("XdMgGMIbVJ0", "libSceSystemService", 1, "libSceSystemService",
+                 sceSystemServiceGetErrorDialogResult);
+    LIB_FUNCTION("NkYJvW+0jbo", "libSceSystemService", 1, "libSceSystemService",
+                 sceSystemServiceGetSubDisplayMode);
 };
 
 } // namespace Libraries::SystemService

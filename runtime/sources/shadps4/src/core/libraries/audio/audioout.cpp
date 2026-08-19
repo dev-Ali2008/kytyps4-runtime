@@ -66,8 +66,11 @@ static AudioFormatInfo GetFormatInfo(const OrbisAudioOutParamFormat format) {
         // Float_8CH_Std
         {true, 4, 8, {0, 1, 2, 3, 6, 7, 4, 5}, true},
     }};
-    const auto index = static_cast<u32>(format);
-    ASSERT_MSG(index < format_infos.size(), "Unknown audio format {}", index);
+    auto index = static_cast<u32>(format);
+    if (index >= format_infos.size()) {
+        LOG_ERROR(Lib_AudioOut, "Unknown audio format {}, using default", index);
+        index = 0;
+    }
     return format_infos[index];
 }
 

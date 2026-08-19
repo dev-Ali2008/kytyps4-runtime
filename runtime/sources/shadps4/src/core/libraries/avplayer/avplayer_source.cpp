@@ -724,24 +724,41 @@ static void CopyNV12Data(u8* dst, const AVFrame& src, bool use_vdec2) {
     const auto dst_size = (dst_width * dst_height * 3) / 2;
     std::memset(dst, 0, dst_size);
 
-    ASSERT(src.data[0] != nullptr);
-    ASSERT(src.data[1] != nullptr);
-    ASSERT(src.linesize[0] >= s32(src_width));
-    ASSERT(src.linesize[1] >= s32(src_width));
+    if (!src.data[0] || !src.data[1]) {
+        LOG_ERROR(Lib_AvPlayer, "NV12 source data pointers are null.");
+        return;
+    }
+    const auto luma_copy_width =
+        std::min<u32>(src_width, src.linesize[0] > 0 ? u32(src.linesize[0]) : src_width);
+    const auto chroma_copy_width =
+        std::min<u32>(src_width, src.linesize[1] > 0 ? u32(src.linesize[1]) : src_width);
+    if (s32(src.linesize[0]) < s32(src_width)) {
+        LOG_WARNING(Lib_AvPlayer, "NV12 luma linesize ({}) < src_width ({}), clamping copy width.",
+                    src.linesize[0], src_width);
+    }
+    if (s32(src.linesize[1]) < s32(src_width)) {
+        LOG_WARNING(Lib_AvPlayer,
+                    "NV12 chroma linesize ({}) < src_width ({}), clamping copy width.",
+                    src.linesize[1], src_width);
+    }
 
     const auto luma_dst = dst;
     for (u32 y = 0; y < src_height; ++y) {
-        std::memcpy(luma_dst + y * dst_width, src.data[0] + y * src.linesize[0], src_width);
+        std::memcpy(luma_dst + y * dst_width, src.data[0] + y * src.linesize[0], luma_copy_width);
     }
 
     const auto chroma_dst = dst + dst_width * dst_height;
     for (u32 y = 0; y < src_height / 2; ++y) {
-        std::memcpy(chroma_dst + y * dst_width, src.data[1] + y * src.linesize[1], src_width);
+        std::memcpy(chroma_dst + y * dst_width, src.data[1] + y * src.linesize[1],
+                    chroma_copy_width);
     }
 }
 
-Frame AvPlayerSource::PrepareVideoFrame(GuestBuffer buffer, const AVFrame& frame) {
-    ASSERT(frame.format == AV_PIX_FMT_NV12);
+std::optional<Frame> AvPlayerSource::PrepareVideoFrame(GuestBuffer buffer, const AVFrame& frame) {
+    if (frame.format != AV_PIX_FMT_NV12) {
+        LOG_WARNING(Lib_AvPlayer, "Expected NV12 frame format, got {}.", frame.format);
+        return std::nullopt;
+    }
 
     auto p_buffer = buffer.GetBuffer();
     CopyNV12Data(p_buffer, frame, m_use_vdec2);
@@ -840,8 +857,11 @@ void AvPlayerSource::VideoDecoderThread(std::stop_token stop) {
                         return;
                     }
                     auto prep_frame = PrepareVideoFrame(std::move(buffer.value()), *nv12_frame);
-                    const u64 frame_ts = prep_frame.info.timestamp;
-                    m_video_frames.Push(std::move(prep_frame));
+                    if (!prep_frame.has_value()) {
+                        continue;
+                    }
+                    const u64 frame_ts = prep_frame->info.timestamp;
+                    m_video_frames.Push(std::move(prep_frame.value()));
                     const u64 count = ++m_trace_video_frame_queued_count;
                     if (ShouldTraceCount(count)) {
                         LOG_INFO(Lib_AvPlayer,
@@ -851,8 +871,11 @@ void AvPlayerSource::VideoDecoderThread(std::stop_token stop) {
                     }
                 } else {
                     auto prep_frame = PrepareVideoFrame(std::move(buffer.value()), *up_frame);
-                    const u64 frame_ts = prep_frame.info.timestamp;
-                    m_video_frames.Push(std::move(prep_frame));
+                    if (!prep_frame.has_value()) {
+                        continue;
+                    }
+                    const u64 frame_ts = prep_frame->info.timestamp;
+                    m_video_frames.Push(std::move(prep_frame.value()));
                     const u64 count = ++m_trace_video_frame_queued_count;
                     if (ShouldTraceCount(count)) {
                         LOG_INFO(Lib_AvPlayer,
@@ -899,9 +922,16 @@ AvPlayerSource::AVFramePtr AvPlayerSource::ConvertAudioFrame(const AVFrame& fram
     return pcm16_frame;
 }
 
-Frame AvPlayerSource::PrepareAudioFrame(GuestBuffer buffer, const AVFrame& frame) {
-    ASSERT(frame.format == AV_SAMPLE_FMT_S16);
-    ASSERT(frame.nb_samples <= 1024);
+std::optional<Frame> AvPlayerSource::PrepareAudioFrame(GuestBuffer buffer, const AVFrame& frame) {
+    if (frame.format != AV_SAMPLE_FMT_S16) {
+        LOG_WARNING(Lib_AvPlayer, "Expected S16 audio format, got {}.", frame.format);
+        return std::nullopt;
+    }
+    if (frame.nb_samples > 1024) {
+        LOG_WARNING(Lib_AvPlayer, "Audio frame nb_samples ({}) exceeds 1024, skipping frame.",
+                    frame.nb_samples);
+        return std::nullopt;
+    }
 
     auto p_buffer = buffer.GetBuffer();
     const auto size = frame.ch_layout.nb_channels * frame.nb_samples * sizeof(u16);
@@ -979,9 +1009,15 @@ void AvPlayerSource::AudioDecoderThread(std::stop_token stop) {
                 }
                 if (up_frame->format != AV_SAMPLE_FMT_S16) {
                     const auto pcm16_frame = ConvertAudioFrame(*up_frame);
-                    m_audio_frames.Push(PrepareAudioFrame(std::move(buffer.value()), *pcm16_frame));
+                    auto prep_frame = PrepareAudioFrame(std::move(buffer.value()), *pcm16_frame);
+                    if (prep_frame.has_value()) {
+                        m_audio_frames.Push(std::move(prep_frame.value()));
+                    }
                 } else {
-                    m_audio_frames.Push(PrepareAudioFrame(std::move(buffer.value()), *up_frame));
+                    auto prep_frame = PrepareAudioFrame(std::move(buffer.value()), *up_frame);
+                    if (prep_frame.has_value()) {
+                        m_audio_frames.Push(std::move(prep_frame.value()));
+                    }
                 }
                 m_audio_frames_cv.Notify();
             }

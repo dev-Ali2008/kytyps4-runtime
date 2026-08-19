@@ -649,12 +649,12 @@ void BufferCache::EnsureDetileSourceWritable(Buffer& buffer, u32 size) {
 std::pair<Buffer*, u32> BufferCache::ObtainBufferForImage(VAddr gpu_addr, u32 size) {
     LogStagingDiagConfigOnce();
 
-    // Mali dig opt-in only. Forcing the multi-slot Upload ring for all FHD on Turnip
-    // skipped SynchronizeBuffer and copied sparse guest memory into host-visible
-    // staging → black floors + blocky garbage textures (Bloodborne on Adreno 750).
-    // Enable with BACHATA_STAGING_FHD_RING=1 (or debug.bachata.staging_fhd_ring=1).
-    if (IsFullResStagingSize(size) &&
-        StagingEnvTruthy(std::getenv("BACHATA_STAGING_FHD_RING"))) {
+    // Auto-enable FHD staging ring on non-Mali GPU to prevent texture corruption.
+    const auto driver_id = instance.GetDriverID();
+    const bool is_mali_gpu = driver_id == vk::DriverId::eArmProprietary ||
+                              driver_id == vk::DriverId::eMesaPanvk;
+    const bool fhd_ring_enabled = StagingEnvTruthy(std::getenv("BACHATA_STAGING_FHD_RING")) || !is_mali_gpu;
+    if (IsFullResStagingSize(size) && fhd_ring_enabled) {
         auto [buf, offset] = AcquireImageStagingSlot(size);
         ASSERT(buf && buf->mapped_data.size() >= size);
         memory->CopySparseMemory(gpu_addr, buf->mapped_data.data(), size);

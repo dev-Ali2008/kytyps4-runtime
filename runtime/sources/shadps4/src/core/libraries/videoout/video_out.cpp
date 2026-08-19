@@ -314,7 +314,9 @@ s32 PS4_SYSV_ABI sceVideoOutGetResolutionStatus(s32 handle, SceVideoOutResolutio
 s32 PS4_SYSV_ABI sceVideoOutOpen(Libraries::UserService::OrbisUserServiceUserId userId, s32 busType,
                                  s32 index, const void* param) {
     LOG_INFO(Lib_VideoOut, "called");
-    ASSERT(busType == SCE_VIDEO_OUT_BUS_TYPE_MAIN);
+    if (busType != SCE_VIDEO_OUT_BUS_TYPE_MAIN) {
+        LOG_WARNING(Lib_VideoOut, "Non-main bus type {} requested, treating as main", busType);
+    }
 
     if (index != 0) {
         LOG_ERROR(Lib_VideoOut, "Index != 0");
@@ -377,13 +379,20 @@ s32 sceVideoOutSubmitEopFlip(s32 handle, u32 buf_id, u32 mode, s64 flip_arg, voi
                          "BACHATA_FLIP_TRACE stage=eop_irq index={} arg={} label={}", buf_id,
                          flip_arg, port->buffer_labels[buf_id]);
             }
-            ASSERT_MSG(irq == Platform::InterruptId::GfxFlip, "An unexpected IRQ occured");
-            ASSERT_MSG(port->buffer_labels[buf_id] == 1,
-                       "Out of order flip IRQ: index={} label={} prev_index={} pending={}", buf_id,
-                       port->buffer_labels[buf_id], port->prev_index,
-                       port->flip_status.flip_pending_num);
+            if (irq != Platform::InterruptId::GfxFlip) {
+                LOG_WARNING(Lib_VideoOut, "Unexpected IRQ in flip handler");
+                return;
+            }
+            if (port->buffer_labels[buf_id] != 1) {
+                LOG_WARNING(Lib_VideoOut,
+                            "Out of order flip IRQ: index={} label={} prev_index={} pending={}",
+                            buf_id, port->buffer_labels[buf_id], port->prev_index,
+                            port->flip_status.flip_pending_num);
+            }
             const auto result = driver->SubmitFlip(port, buf_id, flip_arg, true);
-            ASSERT_MSG(result, "EOP flip submission failed");
+            if (!result) {
+                LOG_WARNING(Lib_VideoOut, "EOP flip submission failed");
+            }
         });
 
     return ORBIS_OK;

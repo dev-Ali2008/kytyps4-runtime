@@ -15,6 +15,7 @@
 #include "core/libraries/content_export/content_export.h"
 #include "core/libraries/disc_map/disc_map.h"
 #include "core/libraries/fiber/fiber.h"
+#include "core/libraries/fios2/fios2.h"
 #include "core/libraries/game_live_streaming/gamelivestreaming.h"
 #include "core/libraries/gnmdriver/gnmdriver.h"
 #include "core/libraries/hmd/hmd.h"
@@ -25,9 +26,13 @@
 #include "core/libraries/kernel/kernel.h"
 #include "core/libraries/libc_internal/libc_internal.h"
 #include "core/libraries/libpng/pngdec.h"
+#include "core/libraries/libpng/pngenc.h"
+#include "core/libraries/jpeg/jpegdec.h"
+#include "core/libraries/jpeg/jpegenc.h"
 #include "core/libraries/libs.h"
 #include "core/libraries/mouse/mouse.h"
 #include "core/libraries/move/move.h"
+#include "core/libraries/ngs2/ngs2.h"
 #include "core/libraries/network/http.h"
 #include "core/libraries/network/http2.h"
 #include "core/libraries/network/net.h"
@@ -55,6 +60,7 @@
 #include "core/libraries/random/random.h"
 #include "core/libraries/razor_cpu/razor_cpu.h"
 #include "core/libraries/remote_play/remoteplay.h"
+#include "core/libraries/rtc/rtc.h"
 #include "core/libraries/rudp/rudp.h"
 #include "core/libraries/save_data/dialog/savedatadialog.h"
 #include "core/libraries/save_data/savedata.h"
@@ -65,6 +71,7 @@
 #include "core/libraries/system/commondialog.h"
 #include "core/libraries/system/msgdialog.h"
 #include "core/libraries/system/posix.h"
+#include "core/libraries/system_gesture/system_gesture.h"
 #include "core/libraries/system/systemservice.h"
 #include "core/libraries/system/userservice.h"
 #include "core/libraries/ulobjmgr/ulobjmgr.h"
@@ -119,6 +126,7 @@ void InitHLELibs(Core::Loader::SymbolsResolver* sym) {
     Libraries::ScreenShot::RegisterLib(sym);
     Libraries::AppContent::RegisterLib(sym);
     Libraries::PngDec::RegisterLib(sym);
+    Libraries::JpegDec::RegisterLib(sym);
     Libraries::PlayGo::RegisterLib(sym);
     Libraries::PlayGo::Dialog::RegisterLib(sym);
     Libraries::Random::RegisterLib(sym);
@@ -160,9 +168,16 @@ void InitHLELibs(Core::Loader::SymbolsResolver* sym) {
     Libraries::VrTracker::RegisterLib(sym);
     Libraries::ContentExport::RegisterLib(sym);
     Libraries::VideoRecording::RegisterLib(sym);
+    Libraries::Ngs2::RegisterLib(sym);
+    Libraries::Fios2::RegisterLib(sym);
+    Libraries::SystemGesture::RegisterLib(sym);
+    Libraries::Rtc::RegisterLib(sym);
+    Libraries::PngEnc::RegisterLib(sym);
+    Libraries::JpegEnc::RegisterLib(sym);
 
-    // Loading libSceSsl is locked behind a title workaround that currently applies to nothing.
-    // Libraries::Ssl::RegisterLib(sym);
+    // Enable Ssl — many games link libSceSsl and need at least stubbed
+    // init/connect/send/recv so they don't crash at launch.
+    Libraries::Ssl::RegisterLib(sym);
 }
 
 } // namespace Libraries

@@ -71,10 +71,38 @@ void* PS4_SYSV_ABI sceKernelGetProcParam() {
     return linker->GetProcParam();
 }
 
+s32 PS4_SYSV_ABI sceKernelGetProcessParamInt(u64 processParam, s32 paramId, s32* value) {
+    LOG_WARNING(Lib_Kernel, "called paramId = {}", paramId);
+    if (!value) {
+        return ORBIS_KERNEL_ERROR_EINVAL;
+    }
+    // Common param IDs queried by Bloodborne, Infamous, etc.
+    switch (paramId) {
+    case 1: // OrbisKernelProcessParamId::SceKernelCpuMode
+        *value = 0;
+        break;
+    case 2: // OrbisKernelProcessParamId::SceKernelAppType
+        *value = 0; // game app
+        break;
+    default:
+        *value = 0;
+        break;
+    }
+    return ORBIS_OK;
+}
+
+s32 PS4_SYSV_ABI sceKernelIsAddressValid(VAddr addr) {
+    // Return true for any reasonable address to prevent games from crashing
+    // when they do pointer validity checks.
+    return (addr != 0 && addr < 0x800000000000ULL) ? 1 : 0;
+}
+
 s32 PS4_SYSV_ABI sceKernelLoadStartModule(const char* moduleFileName, u64 args, const void* argp,
                                           u32 flags, const void* pOpt, s32* pRes) {
-    LOG_INFO(Lib_Kernel, "called filename = {}, args = {}", moduleFileName, args);
-    ASSERT(flags == 0);
+    LOG_INFO(Lib_Kernel, "called filename = {}, args = {}, flags = {}", moduleFileName, args, flags);
+    if (flags != 0) {
+        LOG_WARNING(Lib_Kernel, "non-zero flags={:#x} in sceKernelLoadStartModule", flags);
+    }
 
     auto* mnt = Common::Singleton<Core::FileSys::MntPoints>::Instance();
     auto* linker = Common::Singleton<Core::Linker>::Instance();
@@ -109,6 +137,25 @@ s32 PS4_SYSV_ABI sceKernelLoadStartModule(const char* moduleFileName, u64 args, 
     }
 
     return ORBIS_KERNEL_ERROR_ENOENT;
+}
+
+s32 PS4_SYSV_ABI sceKernelGetModuleHandle(const char* moduleName) {
+    LOG_INFO(Lib_Kernel, "called moduleName = {}", moduleName ? moduleName : "(null)");
+    if (!moduleName) {
+        return ORBIS_KERNEL_ERROR_EINVAL;
+    }
+    auto* linker = Common::Singleton<Core::Linker>::Instance();
+    for (s32 i = 0; i < 256; ++i) {
+        auto* mod = linker->GetModule(i);
+        if (!mod) {
+            break;
+        }
+        if (mod->name == moduleName) {
+            return i;
+        }
+    }
+    LOG_WARNING(Lib_Kernel, "Module {} not found, returning fake handle", moduleName);
+    return 1;
 }
 
 s32 PS4_SYSV_ABI sceKernelDlsym(s32 handle, const char* symbol, void** addrp) {
@@ -284,7 +331,7 @@ u32 PS4_SYSV_ABI posix_getuid() {
 }
 
 s32 PS4_SYSV_ABI exit(s32 status) {
-    UNREACHABLE_MSG("Exiting with status code {}", status);
+    LOG_ERROR(Lib_Kernel, "Game called exit() with status {}", status);
     return 0;
 }
 
@@ -297,7 +344,10 @@ void RegisterProcess(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("VOx8NGmHXTs", "libkernel", 1, "libkernel", sceKernelGetCpumode);
     LIB_FUNCTION("g0VTBxfJyu0", "libkernel", 1, "libkernel", sceKernelGetCurrentCpu);
     LIB_FUNCTION("959qrazPIrg", "libkernel", 1, "libkernel", sceKernelGetProcParam);
+    LIB_FUNCTION("79u0MOcCqxM", "libkernel", 1, "libkernel", sceKernelGetProcessParamInt);
+    LIB_FUNCTION("KnHESPMpJnE", "libkernel", 1, "libkernel", sceKernelIsAddressValid);
     LIB_FUNCTION("wzvqT4UqKX8", "libkernel", 1, "libkernel", sceKernelLoadStartModule);
+    LIB_FUNCTION("xV14rSOD7i4", "libkernel", 1, "libkernel", sceKernelGetModuleHandle);
     LIB_FUNCTION("LwG8g3niqwA", "libkernel", 1, "libkernel", sceKernelDlsym);
     LIB_FUNCTION("RpQJJVKTiFM", "libkernel", 1, "libkernel", sceKernelGetModuleInfoForUnwind);
     LIB_FUNCTION("f7KBOafysXo", "libkernel", 1, "libkernel", sceKernelGetModuleInfoFromAddr);

@@ -51,7 +51,7 @@ static const char* acb_task_name[] = NAME_ARRAY(ACB_TASK, MAX_NAMES);
 #define RESUME_ASC(task, id) RESUME(task, acb_task_name[id])
 
 constexpr u64 STALL_BACKOFF_ITERS = 10'000;
-constexpr std::chrono::microseconds STALL_BACKOFF_SLEEP{500};
+constexpr std::chrono::microseconds STALL_BACKOFF_SLEEP{50};
 
 /// Reduces the GPU coroutine busy-spin on memory waits (MEM_SEMAPHORE,
 /// WAIT_REG_MEM, ...) that have no chance to progress yet. While the

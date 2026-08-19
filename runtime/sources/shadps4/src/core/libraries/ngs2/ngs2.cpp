@@ -307,11 +307,17 @@ s32 PS4_SYSV_ABI sceNgs2RackCreate(OrbisNgs2Handle systemHandle, u32 rackId,
                                    const OrbisNgs2RackOption* option,
                                    const OrbisNgs2ContextBufferInfo* bufferInfo,
                                    OrbisNgs2Handle* outHandle) {
-    LOG_ERROR(Lib_Ngs2, "rackId = {}", rackId);
+    LOG_DEBUG(Lib_Ngs2, "rackId = {}", rackId);
     if (!systemHandle) {
         LOG_ERROR(Lib_Ngs2, "systemHandle is nullptr");
         return ORBIS_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
     }
+    if (!outHandle) {
+        return ORBIS_NGS2_ERROR_INVALID_OUT_ADDRESS;
+    }
+    // Return a non-null fake handle encoded from rackId so games can query it.
+    // Bit pattern: high 16 bits = rackId, low 16 bits = 0x2 (Rack type).
+    *outHandle = static_cast<OrbisNgs2Handle>(((u64)rackId << 16) | 0x2);
     return ORBIS_OK;
 }
 
@@ -319,11 +325,15 @@ s32 PS4_SYSV_ABI sceNgs2RackCreateWithAllocator(OrbisNgs2Handle systemHandle, u3
                                                 const OrbisNgs2RackOption* option,
                                                 const OrbisNgs2BufferAllocator* allocator,
                                                 OrbisNgs2Handle* outHandle) {
-    LOG_ERROR(Lib_Ngs2, "rackId = {}", rackId);
+    LOG_DEBUG(Lib_Ngs2, "rackId = {}", rackId);
     if (!systemHandle) {
         LOG_ERROR(Lib_Ngs2, "systemHandle is nullptr");
         return ORBIS_NGS2_ERROR_INVALID_SYSTEM_HANDLE;
     }
+    if (!outHandle) {
+        return ORBIS_NGS2_ERROR_INVALID_OUT_ADDRESS;
+    }
+    *outHandle = static_cast<OrbisNgs2Handle>(((u64)rackId << 16) | 0x2);
     return ORBIS_OK;
 }
 
@@ -346,7 +356,13 @@ s32 PS4_SYSV_ABI sceNgs2RackGetUserData(OrbisNgs2Handle rackHandle, uintptr_t* o
 
 s32 PS4_SYSV_ABI sceNgs2RackGetVoiceHandle(OrbisNgs2Handle rackHandle, u32 voiceIndex,
                                            OrbisNgs2Handle* outHandle) {
-    LOG_DEBUG(Lib_Ngs2, "(STUBBED) voiceIndex = {}", voiceIndex);
+    LOG_DEBUG(Lib_Ngs2, "voiceIndex = {}", voiceIndex);
+    if (!outHandle) {
+        return ORBIS_NGS2_ERROR_INVALID_OUT_ADDRESS;
+    }
+    // Fake voice handle: high 32 bits from rack handle, low 16 bits = voice index, type = Voice(3).
+    *outHandle = static_cast<OrbisNgs2Handle>((rackHandle & 0xFFFFFFFF00000000ULL) |
+                                              ((u64)voiceIndex << 16) | 0x3);
     return ORBIS_OK;
 }
 
@@ -589,12 +605,20 @@ s32 PS4_SYSV_ABI sceNgs2VoiceGetPortInfo(OrbisNgs2Handle voiceHandle, u32 port,
 
 s32 PS4_SYSV_ABI sceNgs2VoiceGetState(OrbisNgs2Handle voiceHandle, OrbisNgs2VoiceState* outState,
                                       size_t stateSize) {
-    LOG_ERROR(Lib_Ngs2, "stateSize = {}", stateSize);
+    if (!outState) {
+        return ORBIS_NGS2_ERROR_INVALID_OUT_ADDRESS;
+    }
+    // Report voice as "idle" (state 0) so games don't spin-wait for playback.
+    outState->stateFlags = 0;
+    LOG_DEBUG(Lib_Ngs2, "voiceHandle = {:#x}", voiceHandle);
     return ORBIS_OK;
 }
 
 s32 PS4_SYSV_ABI sceNgs2VoiceGetStateFlags(OrbisNgs2Handle voiceHandle, u32* outStateFlags) {
-    LOG_ERROR(Lib_Ngs2, "called");
+    if (!outStateFlags) {
+        return ORBIS_NGS2_ERROR_INVALID_OUT_ADDRESS;
+    }
+    *outStateFlags = 0;
     return ORBIS_OK;
 }
 

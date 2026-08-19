@@ -24,6 +24,17 @@ enum class OrbisSystemServiceParamId {
     SystemName = 6,
     GameParentalLevel = 7,
     EnterButtonAssign = 1000,
+    // Additional params queried by various games (Bloodborne, Infamous, Driveclub, etc.)
+    PreventPowerSave = 1001,
+    ExperimentalMode = 1002,
+    ExclusiveFullScreen = 1003,
+    EnableForcePro = 1004,
+    ProVideoOutPixelFormat = 1005,
+    ProVideoOutInitialWidth = 1006,
+    ProVideoOutReprojectionRate = 1007,
+    ScreenPadBrightness = 1008,
+    EnterButtonAssignIsRemappable = 1010,
+    UserSwIfUpToDate = 1012,
 };
 
 enum class OrbisSystemParamDateFormat {
@@ -605,6 +616,14 @@ int PS4_SYSV_ABI sceSystemServiceDisableVoiceRecognition();
 int PS4_SYSV_ABI sceSystemServiceReenableVoiceRecognition();
 int PS4_SYSV_ABI Func_6B1CDB955F0EBD65();
 int PS4_SYSV_ABI Func_CB5E885E225F69F0();
+int PS4_SYSV_ABI sceSystemServiceGetHWCapability(void* ptr);
+int PS4_SYSV_ABI sceSystemServiceInitFadeDimension();
+int PS4_SYSV_ABI sceSystemServiceGetParamSsoClientId();
+int PS4_SYSV_ABI sceSystemServiceGetParamSsoNpEnvironment();
+int PS4_SYSV_ABI sceSystemServiceParamSetInt();
+int PS4_SYSV_ABI sceSystemServiceParamSetString();
+int PS4_SYSV_ABI sceSystemServiceGetErrorDialogResult(int* result);
+int PS4_SYSV_ABI sceSystemServiceGetSubDisplayMode();
 
 void PushSystemServiceEvent(const OrbisSystemServiceEvent& event);
 

@@ -210,7 +210,9 @@ int PS4_SYSV_ABI sceKernelCreateEventFlag(OrbisKernelEventFlag* ef, const char* 
     case 0x00:
         break;
     default:
-        UNREACHABLE();
+        LOG_WARNING(Lib_Kernel, "Unknown queue mode attr: {:#x}", attr & 0xfu);
+        queue_mode = EventFlagInternal::QueueMode::Fifo;
+        break;
     }
 
     switch (attr & 0xf0) {
@@ -223,7 +225,9 @@ int PS4_SYSV_ABI sceKernelCreateEventFlag(OrbisKernelEventFlag* ef, const char* 
     case 0x00:
         break;
     default:
-        UNREACHABLE();
+        LOG_WARNING(Lib_Kernel, "Unknown thread mode attr: {:#x}", attr & 0xf0u);
+        thread_mode = EventFlagInternal::ThreadMode::Single;
+        break;
     }
 
     if (queue_mode == EventFlagInternal::QueueMode::ThreadPrio) {
@@ -309,7 +313,9 @@ int PS4_SYSV_ABI sceKernelPollEventFlag(OrbisKernelEventFlag ef, u64 bitPattern,
         wait = EventFlagInternal::WaitMode::Or;
         break;
     default:
-        UNREACHABLE();
+        LOG_WARNING(Lib_Kernel, "Unknown waitMode: {:#x}", waitMode);
+        wait = EventFlagInternal::WaitMode::And;
+        break;
     }
 
     switch (waitMode & 0xf0) {
@@ -323,7 +329,9 @@ int PS4_SYSV_ABI sceKernelPollEventFlag(OrbisKernelEventFlag ef, u64 bitPattern,
         clear = EventFlagInternal::ClearMode::Bits;
         break;
     default:
-        UNREACHABLE();
+        LOG_WARNING(Lib_Kernel, "Unknown clear mode: {:#x}", waitMode);
+        clear = EventFlagInternal::ClearMode::None;
+        break;
     }
 
     auto result = ef->Poll(bitPattern, wait, clear, pResultPat);
@@ -355,7 +363,9 @@ int PS4_SYSV_ABI sceKernelWaitEventFlag(OrbisKernelEventFlag ef, u64 bitPattern,
         wait = EventFlagInternal::WaitMode::Or;
         break;
     default:
-        UNREACHABLE();
+        LOG_WARNING(Lib_Kernel, "Unknown waitMode: {:#x}", waitMode);
+        wait = EventFlagInternal::WaitMode::And;
+        break;
     }
 
     switch (waitMode & 0xf0) {
@@ -369,7 +379,9 @@ int PS4_SYSV_ABI sceKernelWaitEventFlag(OrbisKernelEventFlag ef, u64 bitPattern,
         clear = EventFlagInternal::ClearMode::Bits;
         break;
     default:
-        UNREACHABLE();
+        LOG_WARNING(Lib_Kernel, "Unknown clear mode: {:#x}", waitMode);
+        clear = EventFlagInternal::ClearMode::None;
+        break;
     }
 
     const int result = ef->Wait(bitPattern, wait, clear, pResultPat, pTimeout);
