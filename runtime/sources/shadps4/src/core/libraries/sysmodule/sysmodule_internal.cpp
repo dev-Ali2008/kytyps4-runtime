@@ -130,6 +130,8 @@ s32 loadModuleInternal(s32 index, s32 argc, const void* argv, s32* res_out) {
     }
 
     s32 start_result = 0;
+    // Handles returned by HLE/stub fallbacks must remain nonzero and unique within this load path.
+    static s32 stub_handle = 100;
     // Bloodborne ships libSceFios2 as a game module, but its LLE path opens menu assets without
     // reading them. Use the synchronous HLE implementation, matching the native Android port.
     if (index == 3) {
@@ -232,7 +234,6 @@ s32 loadModuleInternal(s32 index, s32 argc, const void* argv, s32* res_out) {
 
         // We need to check a few things here.
         // First, check if this is a module we allow LLE for.
-        static s32 stub_handle = 100;
         constexpr auto ModulesToLoad = std::to_array<Core::SysModules>(
             {{"libSceNgs2.sprx", &Libraries::Ngs2::RegisterLib},
              {"libSceUlt.sprx", nullptr},
