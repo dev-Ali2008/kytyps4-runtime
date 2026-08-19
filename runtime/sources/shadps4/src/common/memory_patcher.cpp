@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <codecvt>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <nlohmann/json.hpp>
 #include <pugixml.hpp>
 #include "common/elf_info.h"
@@ -131,13 +135,18 @@ void ApplyPatchesFromXML(std::filesystem::path path) {
                     std::string currentPatchName = it->attribute("Name").value();
                     std::string metadataAppVer = it->attribute("AppVer").value();
                     bool versionMatches = metadataAppVer == app_version;
+                    bool isWildcard = metadataAppVer.empty() || metadataAppVer == "*";
+                    if (!versionMatches && !isWildcard) {
+                        LOG_INFO(Loader, "Patch '{}' AppVer '{}' does not match game version '{}', skipping",
+                                 currentPatchName, metadataAppVer, app_version);
+                    }
 
                     auto patchList = it->first_child();
                     for (pugi::xml_node_iterator patchLineIt = patchList.children().begin();
                          patchLineIt != patchList.children().end(); ++patchLineIt) {
 
                         std::string type = patchLineIt->attribute("Type").value();
-                        if (!versionMatches && type != "mask" && type != "mask_jump32")
+                        if (!versionMatches && !isWildcard && type != "mask" && type != "mask_jump32")
                             continue;
 
                         std::string address = patchLineIt->attribute("Address").value();
@@ -193,12 +202,25 @@ void OnGameLoaded() {
             ApplyPatchesFromXML(file_path);
         }
     } else if (EmulatorState::GetInstance()->IsAutoPatchesLoadEnabled()) {
+        if (!std::filesystem::exists(patch_dir)) {
+            LOG_INFO(Loader, "Patches directory does not exist: {}", patch_dir.string());
+        }
         for (auto const& repo : std::filesystem::directory_iterator(patch_dir)) {
             if (!repo.is_directory()) {
                 continue;
             }
-            std::ifstream json_file{repo.path() / "files.json"};
-            nlohmann::json available_patches = nlohmann::json::parse(json_file);
+            auto filesJsonPath = repo.path() / "files.json";
+            if (!std::filesystem::exists(filesJsonPath)) {
+                continue;
+            }
+            std::ifstream json_file{filesJsonPath};
+            nlohmann::json available_patches;
+            try {
+                available_patches = nlohmann::json::parse(json_file);
+            } catch (const std::exception& e) {
+                LOG_ERROR(Loader, "Failed to parse files.json in {}: {}", repo.path().string(), e.what());
+                continue;
+            }
             std::filesystem::path game_patch_file;
             for (auto const& [filename, serials] : available_patches.items()) {
                 if (std::find(serials.begin(), serials.end(), g_game_serial) != serials.end()) {
@@ -207,11 +229,70 @@ void OnGameLoaded() {
                 }
             }
             if (std::filesystem::exists(game_patch_file)) {
+                LOG_INFO(Loader, "Applying patches from: {}", game_patch_file.string());
                 ApplyPatchesFromXML(game_patch_file);
             }
         }
     }
     ApplyPendingPatches();
+    StartPatchWatcher();
+}
+
+static std::atomic<bool> watcher_running{false};
+static std::thread watcher_thread;
+
+void StartPatchWatcher() {
+    if (watcher_running.load()) return;
+    watcher_running.store(true);
+
+    watcher_thread = std::thread([]() {
+        std::filesystem::path patch_dir = Common::FS::GetUserPath(Common::FS::PathType::PatchesDir);
+        auto last_write_time = std::filesystem::last_write_time(patch_dir);
+
+        while (watcher_running.load()) {
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+            if (!watcher_running.load()) break;
+
+            try {
+                if (!std::filesystem::exists(patch_dir)) continue;
+                auto current_write_time = std::filesystem::last_write_time(patch_dir);
+                if (current_write_time <= last_write_time) {
+                    for (auto const& repo : std::filesystem::directory_iterator(patch_dir)) {
+                        if (!repo.is_directory()) continue;
+                        auto ft = std::filesystem::last_write_time(repo.path());
+                        if (ft > last_write_time) { current_write_time = ft; break; }
+                    }
+                }
+                if (current_write_time > last_write_time) {
+                    last_write_time = current_write_time;
+                    LOG_INFO(Loader, "Patch directory changed, re-applying patches");
+                    for (auto const& repo : std::filesystem::directory_iterator(patch_dir)) {
+                        if (!repo.is_directory()) continue;
+                        auto filesJsonPath = repo.path() / "files.json";
+                        if (!std::filesystem::exists(filesJsonPath)) continue;
+                        std::ifstream json_file{filesJsonPath};
+                        nlohmann::json available_patches;
+                        try {
+                            available_patches = nlohmann::json::parse(json_file);
+                        } catch (...) { continue; }
+                        std::filesystem::path game_patch_file;
+                        for (auto const& [filename, serials] : available_patches.items()) {
+                            if (std::find(serials.begin(), serials.end(), g_game_serial) != serials.end()) {
+                                game_patch_file = repo.path() / filename;
+                                break;
+                            }
+                        }
+                        if (std::filesystem::exists(game_patch_file)) {
+                            ApplyPatchesFromXML(game_patch_file);
+                        }
+                    }
+                }
+            } catch (const std::exception& e) {
+                LOG_ERROR(Loader, "Patch watcher error: {}", e.what());
+            }
+        }
+    });
+    watcher_thread.detach();
 }
 
 void AddPatchToQueue(patchInfo patchToAdd) {

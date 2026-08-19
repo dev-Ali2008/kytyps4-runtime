@@ -41,6 +41,7 @@ struct patchInfo {
 std::string convertValueToHex(const std::string type, const std::string valueStr);
 
 void OnGameLoaded();
+void StartPatchWatcher();
 void AddPatchToQueue(patchInfo patchToAdd);
 
 void PatchMemory(std::string modNameStr, std::string offsetStr, std::string valueStr,

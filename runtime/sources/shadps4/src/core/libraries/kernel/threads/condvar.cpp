@@ -102,7 +102,7 @@ int PthreadCond::Wait(PthreadMutexT* mutex, const OrbisKernelTimespec* abstime, 
 
     Pthread* curthread = g_curthread;
     if (curthread->wchan != nullptr) {
-        LOG_WARNING(Lib_Kernel, "Thread {} already on wait queue, removing first", curthread->GetName());
+        LOG_WARNING(Lib_Kernel, "Thread {} already on wait queue, removing first", curthread->name);
         curthread->wchan = nullptr;
     }
     // _thr_testcancel(curthread);
