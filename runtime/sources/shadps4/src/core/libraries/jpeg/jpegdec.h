@@ -52,7 +52,8 @@ struct OrbisJpegDecDecodeParam {
     u32 degradationLevel;
     u32 rewindFlag;
 };
-static_assert(sizeof(OrbisJpegDecDecodeParam) == 0x20);
+// Two 64-bit pointers plus five 32-bit fields occupy 0x28 bytes on the PS4 ABI.
+static_assert(sizeof(OrbisJpegDecDecodeParam) == 0x28);
 
 struct OrbisJpegDecImageInfo {
     u32 width;
@@ -67,7 +68,8 @@ struct OrbisJpegDecHandleInternal {
     u32 maxWidth;
     u32 maxHeight;
 };
-static_assert(sizeof(OrbisJpegDecHandleInternal) == 0x10);
+// The decoder handle stores one pointer and three 32-bit fields.
+static_assert(sizeof(OrbisJpegDecHandleInternal) == 0x18);
 
 typedef OrbisJpegDecHandleInternal* OrbisJpegDecHandle;
 

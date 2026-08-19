@@ -28,4 +28,7 @@ test("JPEG decoder HLE is registered and included in the build", () => {
   }
   assert.match(jpeg, /stbi_load_from_memory/);
   assert.match(jpeg, /ValidateJpegDecHandle/);
+  const header = read("sources/shadps4/src/core/libraries/jpeg/jpegdec.h");
+  assert.match(header, /sizeof\(OrbisJpegDecDecodeParam\) == 0x28/);
+  assert.match(header, /sizeof\(OrbisJpegDecHandleInternal\) == 0x18/);
 });
