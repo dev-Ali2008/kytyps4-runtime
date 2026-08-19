@@ -5,6 +5,7 @@
 #include <memory>
 #include <stb_image.h>
 
+#include "common/alignment.h"
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/libraries/error_codes.h"
