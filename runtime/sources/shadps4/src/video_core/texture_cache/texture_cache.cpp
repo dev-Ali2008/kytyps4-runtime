@@ -36,7 +36,7 @@ static void LogViewDimensionMismatch(const TextureCache::ImageDesc& desc, const 
         return;
     }
 
-    LOG_WARNING(Render_TextureCache, "View dimension mismatch: addr={:#x} size={:#x} requested_type={} cached_type={}",
+    LOG_WARNING(Render_Vulkan, "View dimension mismatch: addr={:#x} size={:#x} requested_type={} cached_type={}",
                 desc.info.guest_address, desc.info.guest_size,
                 static_cast<u32>(desc.info.type), static_cast<u32>(image.info.type));
 }
