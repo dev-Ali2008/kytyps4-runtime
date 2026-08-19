@@ -14,7 +14,7 @@
 #include <utility>
 
 #include "common/assert.h"
-#include "common/logging.h"
+#include "common/logging/log.h"
 #include "core/libraries/avplayer/avplayer.h"
 #include "core/libraries/avplayer/avplayer_common.h"
 #include "core/libraries/avplayer/avplayer_data_streamer.h"
