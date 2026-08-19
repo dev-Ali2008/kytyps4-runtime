@@ -92,8 +92,7 @@ int PS4_SYSV_ABI fex_libc_cxa_atexit(void (*handler)(void*), void* arg, void* ds
     }
     std::lock_guard lock{atexit_mutex};
     atexit_handlers.push_back({handler, arg, dso_handle});
-    LOG_DEBUG(Lib_LibcInternal, "registered atexit handler at {} arg={} dso={}",
-              static_cast<void*>(reinterpret_cast<void(*)()>(handler)),
+    LOG_DEBUG(Lib_LibcInternal, "registered atexit handler arg={} dso={}",
               static_cast<void*>(arg), static_cast<void*>(dso_handle));
     return 0;
 }

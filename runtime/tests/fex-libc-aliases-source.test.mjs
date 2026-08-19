@@ -41,3 +41,9 @@ test("FEX registers DEADBOLT-critical libc imports instead of ENOSYS fallbacks",
   assert.match(io, /void RegisterFexLibcIoAliases/);
 });
 
+test("FEX CXA logging avoids invalid function-pointer casts", () => {
+  const cxa = read("sources/shadps4/src/core/libraries/libc_internal/libc_internal_cxa.cpp");
+  assert.doesNotMatch(cxa, /static_cast<void\*>\(reinterpret_cast<void\(\*\)\(\)\>/);
+  assert.match(cxa, /registered atexit handler arg=\{\} dso=\{\}/);
+});
+
